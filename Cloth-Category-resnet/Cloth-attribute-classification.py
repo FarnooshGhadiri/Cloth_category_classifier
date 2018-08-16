@@ -33,16 +33,21 @@ def forward_batch(model, criterion_softmax, criterion_binary, inputs, target_sof
         # logging.info("Switch to Train Mode")
         model.train()
     elif phase in ["Validate", "Test"]:
-        inputs_var = Variable(inputs, volatile=True)
-        # logging.info("Switch to Test Mode")
-        model.eval()
+         with torch.no_grad():
+            inputs_var = Variable(inputs, volatile=True)
+            # logging.info("Switch to Test Mode")
+            model.eval()
 
     # forward
     if opt.cuda:
         if len(opt.devices) > 1:
             output_softmax,output_binary = nn.parallel.data_parallel(model, inputs_var, opt.devices)
         else:
-            output_softmax, output_binary = model(inputs_var)
+            if phase in ["Train"]:
+               output_softmax, output_binary = model(inputs_var)
+            elif phase in ["Validate", "Test"]:
+                 with torch.no_grad():
+                       output_softmax, output_binary = model(inputs_var) 
     else:
         output_softmax, output_binary = model(inputs_var)
         #print(output_softmax,output_binary)
@@ -122,11 +127,11 @@ def calc_accuracy(output_binary, output_softmax, target_softmax,target_binary, s
           tmp_correct = np.intersect1d(pred[:,b], tmp_target)
           if len(tmp_correct)<>0:
               correct_attr = attr_type[tmp_correct]
-              tmp_correct_attr[0] = (correct_attr == 0).sum()
-              tmp_correct_attr[1] = (correct_attr == 1).sum()
-              tmp_correct_attr[2] = (correct_attr == 2).sum()
-              tmp_correct_attr[3] = (correct_attr == 3).sum()
-              tmp_correct_attr[4] = (correct_attr == 4).sum()
+              tmp_correct_attr[0] = (correct_attr == 1).sum()
+              tmp_correct_attr[1] = (correct_attr == 2).sum()
+              tmp_correct_attr[2] = (correct_attr == 3).sum()
+              tmp_correct_attr[3] = (correct_attr == 4).sum()
+              tmp_correct_attr[4] = (correct_attr == 5).sum()
 
 
 
@@ -203,7 +208,7 @@ def train(model, criterion_softmax, criterion_binary, train_set, val_set, opt):
             #    # webvis.plot_images(image_dict, opt.display_id + 2 * opt.class_num, epoch, save_result)
 
             # validate and display validate loss and accuracy
-            if len(val_set) > 0 and total_batch_iter % opt.display_validate_freq == 0:
+            if len(val_set) > 0:
                 avg_val_accuracy, avg_val_accuracy_bin, avg_val_loss = validate(model, criterion_softmax, criterion_binary, val_set, opt)
                 util.print_loss(avg_val_loss, "Validate", epoch, total_batch_iter)
                 util.print_accuracy_soft(avg_val_accuracy, "Validate", epoch, total_batch_iter)
@@ -221,13 +226,11 @@ def train(model, criterion_softmax, criterion_binary, train_set, val_set, opt):
       #  logging.info('End of epoch %d / %d \t Time Taken: %d sec' %
                     # (epoch, opt.sum_epoch, time.time() - epoch_start_t))
 
-        if epoch % opt.save_epoch_freq == 0:
-            logging.info('saving the model at the end of epoch %d, iters %d' % (epoch + 1, total_batch_iter))
-            save_model(model, opt, epoch + 1)
+            if epoch % opt.save_epoch_freq == 0:
+               logging.info('saving the model at the end of epoch %d, iters %d' % (epoch + 1, total_batch_iter))
+               save_model(model, opt, epoch + 1)
 
             # adjust learning rate
-        scheduler.step()
-        lr = optimizer.param_groups[0]['lr']
         logging.info('learning rate = %.7f epoch = %d' % (lr, epoch))
     logging.info("--------Optimization Done--------")
 
