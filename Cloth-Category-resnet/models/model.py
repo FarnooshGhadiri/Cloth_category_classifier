@@ -17,9 +17,9 @@ class Fashion_model(nn.Module):
         net_ = resnet.resnet18()
         self.num_classes = num_classes
         self.basemodel = torch.nn.Sequential(*list(net_.children())[:-1])
-        self.tmp_input = Variable(torch.FloatTensor(1, opt.input_channel, opt.input_size, opt.input_size),requires_grad=True)
-        self.tmp_output = self.basemodel(self.tmp_input)
-        self.output_dim = int(self.tmp_output.size()[1])
+        #self.tmp_input = Variable(torch.FloatTensor(1, opt.input_channel, opt.input_size, opt.input_size),requires_grad=True)
+        #self.tmp_output = self.basemodel(self.tmp_input)
+        self.output_dim = 512
         for index, num_class in enumerate(num_classes):
             setattr(self, "FullyConnectedLayer_" + str(index), nn.Linear(self.output_dim, num_class))
 
