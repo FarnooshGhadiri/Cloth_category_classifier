@@ -81,7 +81,7 @@ def forward_dataset(model, criterion_softmax, criterion_binary, data_loader, opt
         sum_batch += 1
         inputs, target_softmax,target_binary = data
         output_binary, output_softmax, bin_loss, cls_loss = forward_batch(model, criterion_softmax, criterion_binary, inputs, target_softmax,target_binary, opt, "Validate")
-        acc_softmax,acc_binary = calc_accuracy(output_softmax,output_binary, target_softmax,target_binary, opt.score_thres, opt.top_k,opt)
+        acc_softmax,acc_binary = calc_accuracy(output_binary,output_softmax, target_softmax,target_binary, opt.score_thres, opt.top_k,opt)
         # accumulate accuracy
         for k in range(len(opt.top_k)):
             avg_accuracy[k] = acc_softmax[k] + avg_accuracy[k]
