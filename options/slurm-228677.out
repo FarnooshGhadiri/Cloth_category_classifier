@@ -1,0 +1,84 @@
+
+======== GPU REPORT ========
+
+==============NVSMI LOG==============
+
+Timestamp                           : Tue Aug 14 16:52:42 2018
+Driver Version                      : 390.25
+
+Attached GPUs                       : 2
+GPU 00000000:01:00.0
+    Accounting Mode                 : Enabled
+    Accounting Mode Buffer Size     : 1920
+    Accounted Processes
+        Process ID                  : 24377
+            GPU Utilization         : 0 %
+            Memory Utilization      : 0 %
+            Max memory usage        : 1 MiB
+            Time                    : 44 ms
+            Is Running              : 0
+        Process ID                  : 9303
+            GPU Utilization         : 0 %
+            Memory Utilization      : 4 %
+            Max memory usage        : 405 MiB
+            Time                    : 0 ms
+            Is Running              : 1
+        Process ID                  : 24367
+            GPU Utilization         : 6 %
+            Memory Utilization      : 7 %
+            Max memory usage        : 24 MiB
+            Time                    : 0 ms
+            Is Running              : 1
+        Process ID                  : 24560
+            GPU Utilization         : 7 %
+            Memory Utilization      : 7 %
+            Max memory usage        : 211 MiB
+            Time                    : 0 ms
+            Is Running              : 1
+
+GPU 00000000:02:00.0
+    Accounting Mode                 : Enabled
+    Accounting Mode Buffer Size     : 1920
+    Accounted Processes
+        Process ID                  : 9303
+            GPU Utilization         : 17 %
+            Memory Utilization      : 6 %
+            Max memory usage        : 0 MiB
+            Time                    : 0 ms
+            Is Running              : 1
+        Process ID                  : 23455
+            GPU Utilization         : 21 %
+            Memory Utilization      : 11 %
+            Max memory usage        : 2364 MiB
+            Time                    : 0 ms
+            Is Running              : 1
+        Process ID                  : 23284
+            GPU Utilization         : 21 %
+            Memory Utilization      : 11 %
+            Max memory usage        : 0 MiB
+            Time                    : 0 ms
+            Is Running              : 1
+
+Tue Aug 14 16:52:42 2018       
++-----------------------------------------------------------------------------+
+| NVIDIA-SMI 390.25                 Driver Version: 390.25                    |
+|-------------------------------+----------------------+----------------------+
+| GPU  Name        Persistence-M| Bus-Id        Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp  Perf  Pwr:Usage/Cap|         Memory-Usage | GPU-Util  Compute M. |
+|===============================+======================+======================|
+|   0  GeForce GTX 750     Off  | 00000000:01:00.0  On |                  N/A |
+| N/A   49C    P8     1W /  38W |    283MiB /  2001MiB |      0%      Default |
++-------------------------------+----------------------+----------------------+
+|   1  GeForce GTX TIT...  Off  | 00000000:02:00.0 Off |                  N/A |
+| 22%   52C    P8    15W / 250W |   2573MiB / 12212MiB |      0%      Default |
++-------------------------------+----------------------+----------------------+
+                                                                               
++-----------------------------------------------------------------------------+
+| Processes:                                                       GPU Memory |
+|  GPU       PID   Type   Process name                             Usage      |
+|=============================================================================|
+|    0      9303      G   /usr/bin/X                                   171MiB |
+|    0     24367      G   kwin                                          15MiB |
+|    0     24560      G   ...passed-by-fd --v8-snapshot-passed-by-fd    91MiB |
+|    1     23455      C   -                                           2560MiB |
++-----------------------------------------------------------------------------+
