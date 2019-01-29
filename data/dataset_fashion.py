@@ -15,8 +15,7 @@ class DeepFashionDataset(Dataset):
         ----------
         root: the root of the DeepFashion dataset. This is the folder
           which contains the subdirectories 'Anno', 'Img', etc.
-          It is assumed that in 'Img' the directory 'img_converted'
-          exists, which gets created by running the script `resize.sh`.
+          
         """
         # self.transform = transforms.Compose(transforms_)
         self.root = opt.dir
@@ -97,46 +96,3 @@ class DeepFashionDataset(Dataset):
         return self.num_files
 
 
-# if __name__ == '__main__':
-#  op = Options()
-#  opt = op.parse()
-#  from torch.utils.data import DataLoader
-# #root = os.environ["DEEPFASHION_FOLDER"]
-# #root="/home/farnoosh/Projects/DeepFashion/Category and Attribute Prediction Benchmark"
-# #train_transforms = [
-#  #   transforms.ToTensor(),
-#   #  transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
-# #]
-#  ds = DeepFashionDataset(opt)
-#
-#  num_train = len(ds)
-#  indices = list(range(num_train))
-#  print(opt.ratio[1])
-#  split =int((opt.ratio[1]+opt.ratio[2])*num_train)
-#
-#  validation_Test_idx = np.random.choice(indices, size=split, replace=False)
-#  train_idx = list(set(indices) - set(validation_Test_idx))
-#  train_sampler = SubsetRandomSampler(train_idx)
-# #validation Set
-#  split = int(round(0.5 * len(validation_Test_idx)))
-#  validation_idx = np.random.choice(validation_Test_idx, size=split, replace=False)
-#  validation_sampler = SubsetRandomSampler(validation_idx)
-# #Test set
-#  test_idx=list(set(validation_Test_idx) - set(validation_idx))
-#  test_sampler = SubsetRandomSampler(test_idx)
-#
-#
-#  train_loader = DataLoader(ds, batch_size=10, shuffle=False, sampler=train_sampler)
-#  Validate_loader = DataLoader(ds, batch_size=10, shuffle=False, sampler=validation_sampler)
-#  Test_loader = DataLoader(ds, batch_size=10, shuffle=False, sampler=test_sampler)
-#
-#  for i, data in enumerate(train_loader):
-#     inputs, target_1,target_2  = data
-#     inputs_var = Variable(inputs, requires_grad=True)
-#     model = load_model(opt, [50,1000])
-#     model.train()
-#     output = model(inputs_var)
-#     print(output)
-
-
-   #stuff = iter(train_loader).next()
