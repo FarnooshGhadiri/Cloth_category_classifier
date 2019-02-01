@@ -14,7 +14,7 @@ class DeepFashionDataset(Dataset):
         Parameters
         ----------
         root: the root of the DeepFashion dataset. This is the folder
-          which contains the subdirectories 'Anno', 'Img', etc.
+          which contains the subdirectories 'Anno', 'High_res', etc. 
           
         """
         # self.transform = transforms.Compose(transforms_)
