@@ -7,7 +7,7 @@ A pytorch implemented classifier for category classification and attribute predi
 <ul>
 <li> <h3>Data</h3> 
  Data preparation module consisting of reading and transforming data. 
-<font color="red"><br/> The directory structure after downloading and extracting dataset:
+<br/> The directory structure after downloading and extracting dataset:
 <br/># fashion_data/
 <br/># ---Anno
 <br/># ------list_attr_cloth.txt
@@ -17,8 +17,8 @@ A pytorch implemented classifier for category classification and attribute predi
 <br/># ---High-res
 <br/># -----Img
 <br/># -------img "Contains high resolutiom images used for training, validation and testing"
- </font>
  
- <li>data</li>
+ 
+ <li><h3>Model</h3></li>
    
 <\ul>data3
