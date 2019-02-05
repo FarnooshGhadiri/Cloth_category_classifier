@@ -19,6 +19,9 @@ A pytorch implemented classifier for category classification and attribute predi
 <br/># -------img "Contains high resolutiom images used for training, validation and testing"
  
  
- <li><h3>Model</h3></li>
-   
-<\ul>data3
+ <li><h3>Model</h3>
+  <br/> Resnet18
+<li><h3>Test</h3>
+ <br/>Deepfashion dataset
+</ul>
+</li>
