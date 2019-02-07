@@ -7,7 +7,7 @@ import logging
 import numpy as np
 import torch
 from operator import add
-print "Pytorch Version: ", torch.__version__
+print ("Pytorch Version: ", torch.__version__)
 import torch.nn as nn
 import torch.optim as optim
 import torch.backends.cudnn as cudnn
