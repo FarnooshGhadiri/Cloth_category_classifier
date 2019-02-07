@@ -3,7 +3,7 @@ from options.options import Options
 from torch.utils.data import Dataset
 from PIL import Image
 import torchvision.transforms as transforms
-from transformer import get_transformer
+from data.transformer import get_transformer
 import piexif
 import imghdr
 Image.MAX_IMAGE_PIXELS = None
