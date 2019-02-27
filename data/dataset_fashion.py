@@ -73,6 +73,7 @@ class DeepFashionDataset(Dataset):
         img_type = imghdr.what(filepath)
         try:
             open_img = Image.open(filepath)
+            open_img = open_img.convert("RGB")
         except:
             print('can not open the image')
             print(filepath)
@@ -81,13 +82,6 @@ class DeepFashionDataset(Dataset):
         except:
             print('can not transfer the image')
             print(filepath)
-        #if img_type == 'jpeg':
-         # piexif.remove(filepath)
-        #try:
-         #  tmp_img = self.transformer(Image.open(filepath))
-        #except:
-         #  print(filepath)
-        img=tmp_img[0:3]
         attr_label = self.attrs[int(index)]
         category_label = self.categories[int(index)]
         return img, category_label, attr_label
