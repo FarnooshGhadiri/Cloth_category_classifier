@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import os
 import sys
 import time
@@ -7,7 +9,7 @@ import logging
 import numpy as np
 import torch
 from operator import add
-print "Pytorch Version: ", torch.__version__
+print("Pytorch Version: ", torch.__version__)
 import torch.nn as nn
 import torch.optim as optim
 import torch.backends.cudnn as cudnn
@@ -26,7 +28,7 @@ from data.input import get_attr_name, get_Ctg_name,get_weight_attr_img
 
 def forward_batch(model, criterion_softmax, criterion_binary, inputs, target_softmax,target_binary, opt, phase):
     if opt.cuda:
-        inputs = inputs.cuda(opt.devices[0], async=True)
+        inputs = inputs.cuda(opt.devices[0])
 
     if phase in ["Train"]:
         inputs_var = inputs
@@ -55,13 +57,13 @@ def forward_batch(model, criterion_softmax, criterion_binary, inputs, target_sof
 
     # Calculate loss for sigmoid
     if opt.cuda:
-        target_binary = target_binary.cuda(opt.devices[0], async=True)
+        target_binary = target_binary.cuda(opt.devices[0])
     bin_loss = criterion_binary(output_binary, target_binary)
 
     # calculate loss for softmax
 
     if opt.cuda:
-         target_softmax = target_softmax.cuda(opt.devices[0], async=True)
+         target_softmax = target_softmax.cuda(opt.devices[0])
 
     cls_loss = criterion_softmax(output_softmax, target_softmax)
     #print(output_binary.min())
@@ -254,12 +256,13 @@ def main():
 
     # initialize train or test working dir
     trainer_dir = "trainer_" + opt.name
-    opt.model_dir = os.path.join(opt.dir, trainer_dir, "Train_res18_512")
-    opt.data_dir = os.path.join(opt.dir, trainer_dir, "Data")
-    opt.test_dir = os.path.join(opt.dir, trainer_dir, "Test")
+    opt.model_dir = os.path.join("results", trainer_dir, "Train_res18_512")
+    #opt.data_dir = os.path.join(opt.data_dir, trainer_dir, "Data")
+    opt.test_dir = os.path.join(opt.data_dir, trainer_dir, "Test")
 
-    if not os.path.exists(opt.data_dir):
-        os.makedirs(opt.data_dir)
+    # why need to make the data dir??
+    #if not os.path.exists(opt.data_dir):
+    #    os.makedirs(opt.data_dir)
     if opt.mode == "Train":
         if not os.path.exists(opt.model_dir):
             os.makedirs(opt.model_dir)
@@ -315,11 +318,11 @@ def main():
 
 
     #----------
-    train_sampler = SubsetRandomSampler(train_idx)
+    train_sampler = SubsetRandomSampler(train_idx.astype(np.int32))
     # validation Set
-    validation_sampler = SubsetRandomSampler(validation_idx)
+    validation_sampler = SubsetRandomSampler(validation_idx.astype(np.int32))
     # Test set
-    test_sampler = SubsetRandomSampler(test_idx)
+    test_sampler = SubsetRandomSampler(test_idx.astype(np.int32))
 
     train_set = DataLoader(ds, batch_size=opt.batch_size, shuffle=False, sampler=train_sampler)
     val_set = DataLoader(ds, batch_size=opt.batch_size, shuffle=False, sampler=validation_sampler)
@@ -363,14 +366,14 @@ def main():
         model = model.cuda(opt.devices[0])
         criterion_softmax = criterion_softmax.cuda(opt.devices[0])
         criterion_binary = criterion_binary.cuda(opt.devices[0])
-        cudnn.benchmark = True
+        #cudnn.benchmark = True
 
     # Train model
     if opt.mode == "Train":
-        train(model, criterion_softmax,criterion_binary, train_set, val_set, opt)
+        train(model, criterion_softmax, criterion_binary, train_set, val_set, opt)
     # Test model
     elif opt.mode == "Test":
-        test(model, criterion_softmax,criterion_binary, test_set, opt)
+        test(model, criterion_softmax, criterion_binary, test_set, opt)
 
 
 if __name__ == "__main__":

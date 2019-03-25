@@ -6,8 +6,10 @@ class Options():
     def __init__(self):
         self.parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
         
-        self.parser.add_argument('--dir', default='/network/tmp1/ghadirif/DeepFashion', help='path to the data directory containing Img and annotation')
-        self.parser.add_argument('--name', default='test', help='subdirectory name for training or testing, snapshot, splited dataset and test results exist here')
+        self.parser.add_argument('--data_dir', default='/network/tmp1/ghadirif/DeepFashion', help='path to the data directory containing Img and annotation')
+        #self.parser.add_argument('--results_dir', default='/network/tmp1/ghadirif/DeepFashion', help='path to the data directory containing Img and annotation')
+        
+        self.parser.add_argument('--name', default='my_experiment', help='subdirectory name for training or testing, snapshot, splited dataset and test results exist here')
         self.parser.add_argument('--Try', default='1', help='First Division of DataSet into train, Val and test')
         self.parser.add_argument('--mode', default='Train', help='run mode of training or testing. [Train | Test | train | test]')
         self.parser.add_argument('--model', default='Resnet', help='model type. [Alexnet | LightenB | VGG16 | Resnet18 | ...]')
@@ -28,7 +30,7 @@ class Options():
         self.parser.add_argument('--mean', type=str, default='(0.5, 0.5, 0.5)', help='sequence of means for each channel used for normization')
         self.parser.add_argument('--std', type=str, default='(0.5, 0.5, 0.5)', help='sequence standard deviations for each channel used for normization')
         self.parser.add_argument('--padding', action='store_true', help='default false. If true, image will be padded if scaled box is out of image boundary')
-        self.parser.add_argument('--checkpoint_name', type=str, default='/network/tmp1/ghadirif/DeepFashion/model512/epoch_6.pth', help='path to pretrained model or model to deploy')
+        self.parser.add_argument('--checkpoint_name', type=str, default="", help='path to pretrained model or model to deploy')
         self.parser.add_argument('--pretrain', action='store_true', help='default false. If true, load pretrained model to initizaize model state_dict')
         ## for train
         self.parser.add_argument('--validate_ratio', type=float, default=0.1, help='ratio of validate set when validate model')

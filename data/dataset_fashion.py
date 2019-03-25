@@ -4,8 +4,8 @@ from torch.utils.data import Dataset
 from PIL import Image
 import torchvision.transforms as transforms
 from data.transformer import get_transformer
-import piexif
-import imghdr
+#import piexif
+#import imghdr
 Image.MAX_IMAGE_PIXELS = None
 
 class DeepFashionDataset(Dataset):
@@ -17,14 +17,14 @@ class DeepFashionDataset(Dataset):
           which contains the subdirectories 'Anno', 'High_res', etc. 
           
         """
+        super(DeepFashionDataset, self).__init__()
         # self.transform = transforms.Compose(transforms_)
-        self.root = opt.dir
+        self.root = opt.data_dir
         self.Ctg_num=opt.numctg
         # Store information about the dataset.
         self.filenames = None
         self.attrs = None
         self.categories = None
-        self.num_files = None
         # Read the metadata files.
         self.get_list_attr_img()
         self.get_list_category_img()
@@ -35,7 +35,6 @@ class DeepFashionDataset(Dataset):
         f = open(filename)
         # Skip the first two lines.
         num_files = int(f.readline())
-        self.num_files = num_files
         self.filenames = [None] * num_files
         self.attrs = [None] * num_files
         f.readline()
@@ -69,8 +68,9 @@ class DeepFashionDataset(Dataset):
         f.close()
 
     def __getitem__(self, index):
-        filepath = "%s/High_res/Img/img/%s" % (self.root, self.filenames[int(index)])
-        img_type = imghdr.what(filepath)
+        filepath = "%s/High_res/Img/img/%s" % (self.root, self.filenames[index])
+        #img_type = imghdr.what(filepath)
+        """
         try:
             open_img = Image.open(filepath)
             open_img = open_img.convert("RGB")
@@ -82,11 +82,13 @@ class DeepFashionDataset(Dataset):
         except:
             print('can not transfer the image')
             print(filepath)
+        """
+        img = Image.open(filepath)
+        img = img.convert("RGB")
+        img = self.transformer(img)
         attr_label = self.attrs[int(index)]
         category_label = self.categories[int(index)]
         return img, category_label, attr_label
 
     def __len__(self):
-        return self.num_files
-
-
+        return len(self.filenames)

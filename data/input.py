@@ -3,7 +3,7 @@ import torch
 
 
 def get_attr_name(opt):
-    filename = "%s/Anno/list_attr_cloth.txt" % opt.dir
+    filename = "%s/Anno/list_attr_cloth.txt" % opt.data_dir
     f = open(filename)
     num_files = int(f.readline())
     f.readline()
@@ -20,7 +20,7 @@ def get_attr_name(opt):
     return attrs_name, attrs_type
 
 def get_Ctg_name(opt):
-    filename = "%s/Anno/list_category_cloth.txt" % opt.dir
+    filename = "%s/Anno/list_category_cloth.txt" % opt.data_dir
     f = open(filename)
     f.readline()
     f.readline()
@@ -36,7 +36,7 @@ def get_Ctg_name(opt):
     return Ctg_name, Ctg_type
 
 def get_weight_attr_img(opt):
-     filename = "%s/Anno/list_attr_img.txt" % opt.dir
+     filename = "%s/Anno/list_attr_img.txt" % opt.data_dir
      f = open(filename)
      # Skip the first two lines.
      num_files = int(f.readline())
