@@ -20,7 +20,7 @@ class Options():
         self.parser.add_argument('--shuffle', action='store_true', help='default false. If true, data will be shuffled when split dataset and in batch')
         self.parser.add_argument('--flip', action='store_true',default='True', help='if true, flip image randomly before input into network')
         self.parser.add_argument('--region', action='store_false', help='if true, crop image by input box')
-        self.parser.add_argument('--load_thread', type=int, default=8, help='how many subprocesses to use for data loading')
+        self.parser.add_argument('--num_workers', type=int, default=4, help='how many subprocesses to use for data loading')
         self.parser.add_argument('--crop', type=str, default='CenterCrop', help='crop type, candidates are [NoCrop | RandomCrop | CenterCrop | FiveCrop | TenCrop]')
         self.parser.add_argument('--gray', action='store_true', help='defalut false. If true, image will be converted to gray_scale')
         self.parser.add_argument('--gpu_ids', type=str, default='0', help='gpu ids: e.g. 0  0,1,2, 0,2. use -1 for CPU')

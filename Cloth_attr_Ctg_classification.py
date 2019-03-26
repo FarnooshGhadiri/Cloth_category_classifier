@@ -22,6 +22,7 @@ from torch.utils.data import DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
 from util import util
 from data.input import get_attr_name, get_Ctg_name,get_weight_attr_img
+from tqdm import tqdm
 
 #approach like this
 #  https://www.ritchievink.com/blog/2018/04/12/transfer-learning-with-pytorch-assessing-road-safety-with-computer-vision/
@@ -169,14 +170,22 @@ def train(model, criterion_softmax, criterion_binary, train_set, val_set, opt):
         epoch_start_t = time.time()
         epoch_batch_iter = 0
         logging.info('Begin of epoch %d' % (epoch))
+        pbar = tqdm(total=len(train_set))
         for i, data in enumerate(train_set):
-            inputs, target_softmax,target_binary = data
-           # print(inputs.size())
+            inputs, target_softmax, target_binary = data
+            #print(inputs.size())
            # print(target_binary.size())
-            output_binary, output_softmax, bin_loss, cls_loss = forward_batch(model, criterion_softmax, criterion_binary, inputs, target_softmax,target_binary, opt, "Train")
+            output_binary, output_softmax, bin_loss, cls_loss = forward_batch(
+                model,
+                criterion_softmax, criterion_binary,
+                inputs,
+                target_softmax, target_binary,
+                opt,
+                "Train")
+            
             optimizer.zero_grad()
             loss = bin_loss + cls_loss
-            loss_list = [bin_loss[0],cls_loss[0]]
+            loss_list = [bin_loss.item(), cls_loss.item()]
             loss.backward()
             optimizer.step()
 
@@ -202,6 +211,8 @@ def train(model, criterion_softmax, criterion_binary, train_set, val_set, opt):
                # TODO snapshot loss and accuracy
 
             # validate and display validate loss and accuracy
+
+            pbar.update(1)
         if len(val_set) > 0:
            avg_val_accuracy, avg_acc_per_type, avg_acc_per_attr, avg_val_loss = validate(model, criterion_softmax, criterion_binary, val_set, opt)
            util.print_loss(avg_val_loss, "Validate", epoch, total_batch_iter)
@@ -211,6 +222,7 @@ def train(model, criterion_softmax, criterion_binary, train_set, val_set, opt):
                # if opt.display_id > 0:
                   #  webvis.plot_points(x_axis, val_loss, "Loss", "Validate")
                   # webvis.plot_points(x_axis, accuracy_list, "Accuracy", "Validate")
+        pbar.close()
 
 
       #  logging.info('End of epoch %d / %d \t Time Taken: %d sec' %
@@ -250,6 +262,9 @@ def test(model, criterion_softmax, criterion_binary, test_set, opt):
 
 
 def main():
+
+    print("parse opt...")
+    
     # parse options
     op = Options()
     opt = op.parse()
@@ -274,8 +289,12 @@ def main():
         log_dir = opt.test_dir
         log_path = log_dir + "/test.log"
 
+    print("opt2file...")
+
     # save options to disk
     util.opt2file(opt, log_dir + "/opt.txt")
+
+    print("log setting...")
 
     # log setting
     log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -288,6 +307,8 @@ def main():
     logging.getLogger().addHandler(ch)
     log_level = logging.INFO
     logging.getLogger().setLevel(log_level)
+
+    print("load dataset...")
 
     # load train or test data
     ds = DeepFashionDataset(opt)
@@ -316,7 +337,6 @@ def main():
         #Save test idx
         np.savetxt("Test_idx_%s%s" % (opt.Try,'.txt'), test_idx, fmt='%i', delimiter=",")
 
-
     #----------
     train_sampler = SubsetRandomSampler(train_idx.astype(np.int32))
     # validation Set
@@ -324,9 +344,19 @@ def main():
     # Test set
     test_sampler = SubsetRandomSampler(test_idx.astype(np.int32))
 
-    train_set = DataLoader(ds, batch_size=opt.batch_size, shuffle=False, sampler=train_sampler)
-    val_set = DataLoader(ds, batch_size=opt.batch_size, shuffle=False, sampler=validation_sampler)
-    test_set = DataLoader(ds, batch_size=opt.batch_size, shuffle=False, sampler=test_sampler)
+    train_set = DataLoader(ds,
+                           batch_size=opt.batch_size,
+                           shuffle=False,
+                           sampler=train_sampler,
+                           num_workers=opt.num_workers)
+    val_set = DataLoader(ds,
+                         batch_size=opt.batch_size,
+                         shuffle=False,
+                         sampler=validation_sampler)
+    test_set = DataLoader(ds,
+                          batch_size=opt.batch_size,
+                          shuffle=False,
+                          sampler=test_sampler)
 
 
     num_classes = [opt.numctg,opt.numattri] #temporary lets put the number of class []
@@ -353,6 +383,8 @@ def main():
             opt.checkpoint_name = ""
             logging.warning("WARNING: unknown pretrained model, skip it.")
 
+
+    print("get weight attr img...")
 
     Weight_attribute = get_weight_attr_img(opt)
     print(len(Weight_attribute))
