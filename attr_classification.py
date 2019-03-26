@@ -119,89 +119,81 @@ def forward_dataset(model, criterion_softmax, criterion_binary, data_loader, opt
 
 
 
-def calc_accuracy(output_binary, output_softmax, target_softmax,target_binary, score_thres, top_k,attr_type_num):
-    max_k = max(top_k)
-    batch_size = target_softmax.size(0)
-    _, pred = output_softmax.data.cpu().topk(max_k, 1, True, True)
-    pred = pred.t()
-    correct = pred.eq(target_softmax.cpu().view(1, -1).expand_as(pred))
-    acc_soft = []
-    k_num=0
-    for k in top_k:
-        correct_k = correct[:k].view(-1).float().sum(0)
-        acc_soft.append(correct_k.mul_(100.0 / batch_size))
+def indices_to_binary(indices, length):
+    tmp = torch.zeros(length).float()
+    tmp[indices] = 1
+    return tmp
 
-    #Calculating accuracy for attribute
+def calc_accuracy(output_binary, output_softmax, target_softmax,target_binary, score_thres, top_k, attr_type_num):
 
-    # print(attr_type)
-    Num_GT_attr_per_class = torch.zeros(len(top_k), 6,
-                                        dtype=torch.float)  # all attr, Texture, fabric, Shape, part, style
-    correct_attr_type = torch.zeros(len(top_k), 6, dtype=torch.float)  # all attr, Texture, fabric, Shape, part, style
-    Sum_all_corr_attr = torch.zeros(len(top_k), target_binary.size(1), dtype=torch.float)
-    Sum_all_gt_attr = torch.zeros(len(top_k), target_binary.size(1), dtype=torch.float)
-    # pred = (output_binary.cpu()>=0.50)
-    for k in top_k:
-        _, pred2 = output_binary.data.cpu().topk(k, 1, True, True)
-        for i in range(len(pred2)):
-            #logging.info("length of prediction %f " % (len(pred2)))
-            tmp_output = torch.zeros(output_binary.size(1))
-            tmp_output[pred2[i]] = 1
-            #logging.info("Number of groundtrprediction %f " % (tmp_output.sum()))
-            if i == 0:
-                Topk_binary = tmp_output.view(1, output_binary.size(1))
-            else:
-                Topk_binary = torch.cat((tmp_output.view(1, output_binary.size(1)), Topk_binary), 0)
+    with torch.no_grad():
+    
+        max_k = max(top_k)
+        batch_size = target_softmax.size(0)
+        _, pred_cls = output_softmax.data.cpu().topk(max_k, 1, True, True)
+        pred_cls = pred_cls.t()
+        correct = pred_cls.eq(target_softmax.cpu().view(1, -1).expand_as(pred_cls))
+        cls_acc_dict = {}
+        for k in top_k:
+            correct_k = correct[:k].view(-1).float().sum(0).item()
+            cls_acc_dict["cls_acc_top%i" % k] = correct_k / batch_size
 
+        #Calculating accuracy for attribute
 
-        # Why is k_num never iterated through???
-        # sum(dim=1) instead??
-        correct_topk_preds = Topk_binary.float() * target_binary
-        Correct_pred_per_class = attr_type_num.repeat(batch_size, 1) * correct_topk_preds
-        correct_attr_type[k_num, 0] = correct_topk_preds.sum()
-        correct_attr_type[k_num, 1] = (Correct_pred_per_class == 1).sum()
-        correct_attr_type[k_num, 2] = (Correct_pred_per_class == 2).sum()
-        correct_attr_type[k_num, 3] = (Correct_pred_per_class == 3).sum()
-        correct_attr_type[k_num, 4] = (Correct_pred_per_class == 4).sum()
-        correct_attr_type[k_num, 5] = (Correct_pred_per_class == 5).sum()
+        # print(attr_type)
+        Num_GT_attr_per_class = torch.zeros(len(top_k), 6,
+                                            dtype=torch.float)  # all attr, Texture, fabric, Shape, part, style
+        #correct_attr_type = torch.zeros(len(top_k), 6, dtype=torch.float)  # all attr, Texture, fabric, Shape, part, style
 
+        bin_acc_dict = {}
+        for k in top_k:
+            # Get the top-k indices for the attribute prediction.
+            _, pred_bin = output_binary.data.cpu().topk(k, 1, True, True)
+            
+            topk_indices = None
+            for i in range(len(pred_bin)):
+                tmp_output = indices_to_binary(pred_bin[i], output_binary.size(1))
+                if i == 0:
+                    topk_indices = tmp_output.view(1, output_binary.size(1))
+                else:
+                    topk_indices = torch.cat((tmp_output.view(1, output_binary.size(1)),
+                                              topk_indices), 0)
 
+            correct_topk_preds = topk_indices.float() * target_binary
+            # This is a (bs, 1000) matrix where numbers > 0 are ground truths
+            # denoting the attribute type they belong from (from 1...5).
+            target_attr_by_type = target_binary * attr_type_num.repeat(batch_size, 1)
+            # Same thing but for predictions.
+            correct_preds_by_type = torch.zeros_like(target_attr_by_type)
+            for b in range(batch_size):
+                num_correct_preds = int(correct_topk_preds[b, :].sum()) # according to top-k
+                if target_binary[b, :].sum() > k and num_correct_preds < k:
+                    # If the # of ground truths is > k and the number of correct predictions != k, then
+                    # Sample correct non-top-k predictions, k-num_correct_preds of them
+                    correct_non_topk_preds = (1. - topk_indices) * target_binary
+                    sampled_correct_non_topk_preds = (correct_non_topk_preds[b, :] == 1).nonzero().view(-1)
+                    rand_perm = torch.randperm(len(sampled_correct_non_topk_preds))
+                    sampled_correct_non_topk_preds = sampled_correct_non_topk_preds[ rand_perm ][0:(k-num_correct_preds)]
+                    tmp_binary = torch.zeros(target_binary.size(1))
+                    tmp_binary[sampled_correct_non_topk_preds] = 1
+                    sampled_correct_non_topk_preds = tmp_binary
+                    # Correct predictions include both the correct top-k ones and the sampled ones we did
+                    # from non-top-k.
+                    import pdb
+                    pdb.set_trace()
+                    correct_preds_by_type[b, :] = target_attr_by_type[b, :] * sampled_correct_non_topk_preds + \
+                                                  target_attr_by_type[b, :] * correct_topk_preds[b, :]
+                else:
+                    # Nothing special needs to be done here.
+                    correct_preds_by_type[b, :] = target_attr_by_type[b, :] * correct_topk_preds[b, :]
 
-        correct_non_topk_preds = (1 - Topk_binary) * target_binary
-        target_attr_by_type = target_binary * attr_type_num.repeat(batch_size, 1)
-        
-        correct_preds_by_type = torch.zeros_like(target_attr_by_type)
-        for b in range(batch_size):
-            num_correct_preds = int(correct_topk_preds[b, :].sum()) # according to top-k
-            # What's the reason for the 2nd condition in the IF?
-            if target_binary[b, :].sum() > k and num_correct_preds != k:
-                # Sample correct non-top-k predictions, k-num_correct_preds of them
-                sampled_correct_non_topk_preds = (correct_non_topk_preds[b, :] == 1).nonzero().view(-1)
-                sampled_correct_non_topk_preds = sampled_correct_non_topk_preds[ torch.randperm(len(sampled_correct_non_topk_preds)) ][0:(k-num_correct_preds)]
-                tmp_binary = torch.zeros(target_binary.size(1))
-                tmp_binary[sampled_correct_non_topk_preds] = 1
-                sampled_correct_non_topk_preds = tmp_binary
-                # Correct predictions include both the correct top-k ones and the sampled ones we did
-                # from non-top-k.
-                correct_preds_by_type[b, :] = target_attr_by_type[b, :] * sampled_correct_non_topk_preds + \
-                                              target_attr_by_type[b, :] * correct_topk_preds[b, :]
-            elif num_correct_preds == k:
-                correct_preds_by_type[b, :] = target_attr_by_type[b, :] * correct_topk_preds[b, :]
-            else:
-                raise Exception("This block should never be executed")
+            for j in range(1, 5+1):
+                bin_acc_dict["bin_acc%i_top%i" % (j, k)] = (correct_preds_by_type == j).float().mean().item()
 
-        Num_GT_attr_per_class[k_num, 0] = target_binary.sum()
-        Num_GT_attr_per_class[k_num, 1] = (correct_preds_by_type == 1).sum()
-        Num_GT_attr_per_class[k_num, 2] = (correct_preds_by_type == 2).sum()
-        Num_GT_attr_per_class[k_num, 3] = (correct_preds_by_type == 3).sum()
-        Num_GT_attr_per_class[k_num, 4] = (correct_preds_by_type == 4).sum()
-        Num_GT_attr_per_class[k_num, 5] = (correct_preds_by_type == 5).sum()
-        Sum_all_corr_attr[k_num] = correct_topk_preds.sum(0)
-        Sum_all_gt_attr[k_num] = target_binary.sum(0)
-        #logging.info("Number of groundtruth %f/%f/%f/%f/%f " % (Num_GT_attr_per_class[k_num, 1], Num_GT_attr_per_class[k_num, 2],Num_GT_attr_per_class[k_num, 3],Num_GT_attr_per_class[k_num, 4],Num_GT_attr_per_class[k_num, 5]))
-        #logging.info("Number of Corrected attr per type %f/%f/%f/%f/%f " % (correct_attr_type[k_num, 1], correct_attr_type[k_num, 2],correct_attr_type[k_num, 3],correct_attr_type[k_num, 4],correct_attr_type[k_num, 5]))
-        k_num += 1
+        # Merge the two dictionaries together.
+        cls_acc_dict.update(bin_acc_dict)
 
-    return acc_soft, correct_attr_type, Num_GT_attr_per_class,  Sum_all_corr_attr, Sum_all_gt_attr
+        return cls_acc_dict
 
 
 def train(model, criterion_softmax, criterion_binary, train_set, val_set, opt):
@@ -215,7 +207,6 @@ def train(model, criterion_softmax, criterion_binary, train_set, val_set, opt):
     _, attr_type = get_attr_name(opt)
     for epoch in range(opt.epochs):
         epoch_start_t = time.time()
-        epoch_batch_iter = 0
         logging.info('Begin of epoch %d' % (epoch))
 
         pbar = tqdm(total=len(train_set))
@@ -235,8 +226,6 @@ def train(model, criterion_softmax, criterion_binary, train_set, val_set, opt):
             loss.backward()
             optimizer.step()
 
-           # webvis.reset()
-            epoch_batch_iter += 1
             total_batch_iter += 1
 
             # display train loss and accuracy
@@ -249,6 +238,8 @@ def train(model, criterion_softmax, criterion_binary, train_set, val_set, opt):
                                             opt.score_thres,
                                             opt.top_k,
                                             attr_type)
+
+                """
                 batch_accuracy_soft, Num_correct_attr_type, Num_GT_attr_per_class, Correct_pred_pre_attr, GT_attr_per_attr = acc_outputs
 
                 #acc_soft, correct_attr_type, Num_GT_attr_per_class,  Sum_all_corr_attr, Sum_all_gt_attr
@@ -259,6 +250,7 @@ def train(model, criterion_softmax, criterion_binary, train_set, val_set, opt):
                 util.print_accuracy_soft(batch_accuracy_soft, "Train", epoch, total_batch_iter)
                 util.print_accuracy_attr(batch_accuracy_bin, [], "Train", epoch, total_batch_iter)
                 #util.print_accuracy_bin(batch_accuracy_bin, "Train", epoch, total_batch_iter)
+                """
 
                 # save snapshot
             if total_batch_iter % opt.save_batch_iter_freq == 0:
@@ -267,7 +259,9 @@ def train(model, criterion_softmax, criterion_binary, train_set, val_set, opt):
                # TODO snapshot loss and accuracy
 
             pbar.update(1)
-            pbar.set_postfix({'epoch': epoch+1, 'bin_loss': loss_list[0], 'cls_loss': loss_list[1]})
+            pbar_dict = {'epoch': epoch+1, 'bin_loss': loss_list[0], 'cls_loss': loss_list[1]}
+            pbar_dict.update(acc_outputs)
+            pbar.set_postfix(pbar_dict)
 
             # validate and display validate loss and accuracy
         pbar.close()
@@ -439,7 +433,7 @@ def main():
     #Weight_attribute = get_weight_attr_img(opt)
    # print(len(Weight_attribute))
     # define loss function
-    criterion_softmax = nn.CrossEntropyLoss(weight=opt.loss_weight)
+    criterion_softmax = nn.CrossEntropyLoss() #weight=opt.loss_weight
     criterion_binary = torch.nn.BCELoss()
 
 
@@ -448,7 +442,7 @@ def main():
         model = model.cuda(opt.devices[0])
         criterion_softmax = criterion_softmax.cuda(opt.devices[0])
         criterion_binary = criterion_binary.cuda(opt.devices[0])
-        cudnn.benchmark = True
+        #cudnn.benchmark = True
 
     # Train model
     if opt.mode == "Train":
