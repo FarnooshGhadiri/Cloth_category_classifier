@@ -20,13 +20,15 @@ from torch.utils.data import DataLoader
 from torch.utils.data.sampler import SubsetRandomSampler
 from util import util
 from data.input import get_attr_name, get_Ctg_name,get_weight_attr_img
-from random import *
+#from random import *
+from random import sample
 #approach like this
 #  https://www.ritchievink.com/blog/2018/04/12/transfer-learning-with-pytorch-assessing-road-safety-with-computer-vision/
+from tqdm import tqdm
 
 def forward_batch(model, criterion_softmax, criterion_binary, inputs, target_softmax,target_binary, opt, phase):
     if opt.cuda:
-        inputs = inputs.cuda(opt.devices[0], async=True)
+        inputs = inputs.cuda(opt.devices[0])
 
     if phase in ["Train"]:
         inputs_var = inputs
@@ -55,13 +57,13 @@ def forward_batch(model, criterion_softmax, criterion_binary, inputs, target_sof
 
     # Calculate loss for sigmoid
     if opt.cuda:
-        target_binary = target_binary.cuda(opt.devices[0], async=True)
+        target_binary = target_binary.cuda(opt.devices[0])
     bin_loss = criterion_binary(output_binary, target_binary)
 
     # calculate loss for softmax
 
     if opt.cuda:
-         target_softmax = target_softmax.cuda(opt.devices[0], async=True)
+         target_softmax = target_softmax.cuda(opt.devices[0])
 
     cls_loss = criterion_softmax(output_softmax, target_softmax)
     #print(output_binary.min())
@@ -110,6 +112,13 @@ def forward_dataset(model, criterion_softmax, criterion_binary, data_loader, opt
     avg_loss = map(lambda x: x/(sum_batch), avg_loss)
     return avg_accuracy, avg_acc_per_type,avg_acc_per_attr, avg_loss
 
+
+
+
+
+
+
+
 def calc_accuracy(output_binary, output_softmax, target_softmax,target_binary, score_thres, top_k,attr_type_num):
     max_k = max(top_k)
     batch_size = target_softmax.size(0)
@@ -130,10 +139,8 @@ def calc_accuracy(output_binary, output_softmax, target_softmax,target_binary, s
     correct_attr_type = torch.zeros(len(top_k), 6, dtype=torch.float)  # all attr, Texture, fabric, Shape, part, style
     Sum_all_corr_attr = torch.zeros(len(top_k), target_binary.size(1), dtype=torch.float)
     Sum_all_gt_attr = torch.zeros(len(top_k), target_binary.size(1), dtype=torch.float)
-    S_target_binary=target_binary
     # pred = (output_binary.cpu()>=0.50)
     for k in top_k:
-        target_binary=S_target_binary
         _, pred2 = output_binary.data.cpu().topk(k, 1, True, True)
         for i in range(len(pred2)):
             #logging.info("length of prediction %f " % (len(pred2)))
@@ -146,43 +153,49 @@ def calc_accuracy(output_binary, output_softmax, target_softmax,target_binary, s
                 Topk_binary = torch.cat((tmp_output.view(1, output_binary.size(1)), Topk_binary), 0)
 
 
-        Correct_pred_bin = Topk_binary.float() * target_binary
-        Correct_pred_per_class = attr_type_num.repeat(batch_size, 1) * Correct_pred_bin
-        correct_attr_type[k_num, 0] = Correct_pred_bin.sum()
+        # Why is k_num never iterated through???
+        # sum(dim=1) instead??
+        correct_topk_preds = Topk_binary.float() * target_binary
+        Correct_pred_per_class = attr_type_num.repeat(batch_size, 1) * correct_topk_preds
+        correct_attr_type[k_num, 0] = correct_topk_preds.sum()
         correct_attr_type[k_num, 1] = (Correct_pred_per_class == 1).sum()
         correct_attr_type[k_num, 2] = (Correct_pred_per_class == 2).sum()
         correct_attr_type[k_num, 3] = (Correct_pred_per_class == 3).sum()
         correct_attr_type[k_num, 4] = (Correct_pred_per_class == 4).sum()
         correct_attr_type[k_num, 5] = (Correct_pred_per_class == 5).sum()
 
-        Target_minus_corrected = target_binary * (1 - Topk_binary)
-        Num_GT_attr = target_binary * attr_type_num.repeat(batch_size, 1)
+
+
+        correct_non_topk_preds = (1 - Topk_binary) * target_binary
+        target_attr_by_type = target_binary * attr_type_num.repeat(batch_size, 1)
+        
+        correct_preds_by_type = torch.zeros_like(target_attr_by_type)
         for b in range(batch_size):
-            if target_binary[b, :].sum() > k and int(Correct_pred_bin[b, :].sum())!=k:
-                #logging.info("did through %f " % (int(Correct_pred_bin[b, :].sum())))
-                sample_target = (Target_minus_corrected[b, :] == 1).nonzero()
-                List_sample_GT = sample_target.view(1, -1)
-                New_sample_GT = sample(List_sample_GT[0], (k - int(Correct_pred_bin[b, :].sum())))
-                tmp_sample_GT = torch.zeros(target_binary.size(1))
-                tmp_sample_GT[torch.stack(New_sample_GT)] = 1
-                Num_GT_attr[b, :] = Num_GT_attr[b, :] * tmp_sample_GT+ Num_GT_attr[b, :] * Correct_pred_bin[b,:]
-                target_binary[b, :] = target_binary[b, :] * tmp_sample_GT+ target_binary[b, :] * Correct_pred_bin[b,:]
-                #logging.info("target bianry for a batch %f " % (target_binary[b, :].sum()))
-
-            elif int(Correct_pred_bin[b, :].sum())==k:
-                #logging.info("did through2 %f " % (int(Correct_pred_bin[b, :].sum())))
-                target_binary[b, :] = Correct_pred_bin[b, :]
-                Num_GT_attr[b,:]=Num_GT_attr[b, :] * Correct_pred_bin[b,:]
-                #logging.info("target bainary for a batch2 %f " % (target_binary[b, :].sum()))
-
+            num_correct_preds = int(correct_topk_preds[b, :].sum()) # according to top-k
+            # What's the reason for the 2nd condition in the IF?
+            if target_binary[b, :].sum() > k and num_correct_preds != k:
+                # Sample correct non-top-k predictions, k-num_correct_preds of them
+                sampled_correct_non_topk_preds = (correct_non_topk_preds[b, :] == 1).nonzero().view(-1)
+                sampled_correct_non_topk_preds = sampled_correct_non_topk_preds[ torch.randperm(len(sampled_correct_non_topk_preds)) ][0:(k-num_correct_preds)]
+                tmp_binary = torch.zeros(target_binary.size(1))
+                tmp_binary[sampled_correct_non_topk_preds] = 1
+                sampled_correct_non_topk_preds = tmp_binary
+                # Correct predictions include both the correct top-k ones and the sampled ones we did
+                # from non-top-k.
+                correct_preds_by_type[b, :] = target_attr_by_type[b, :] * sampled_correct_non_topk_preds + \
+                                              target_attr_by_type[b, :] * correct_topk_preds[b, :]
+            elif num_correct_preds == k:
+                correct_preds_by_type[b, :] = target_attr_by_type[b, :] * correct_topk_preds[b, :]
+            else:
+                raise Exception("This block should never be executed")
 
         Num_GT_attr_per_class[k_num, 0] = target_binary.sum()
-        Num_GT_attr_per_class[k_num, 1] = (Num_GT_attr == 1).sum()
-        Num_GT_attr_per_class[k_num, 2] = (Num_GT_attr == 2).sum()
-        Num_GT_attr_per_class[k_num, 3] = (Num_GT_attr == 3).sum()
-        Num_GT_attr_per_class[k_num, 4] = (Num_GT_attr == 4).sum()
-        Num_GT_attr_per_class[k_num, 5] = (Num_GT_attr == 5).sum()
-        Sum_all_corr_attr[k_num] = Correct_pred_bin.sum(0)
+        Num_GT_attr_per_class[k_num, 1] = (correct_preds_by_type == 1).sum()
+        Num_GT_attr_per_class[k_num, 2] = (correct_preds_by_type == 2).sum()
+        Num_GT_attr_per_class[k_num, 3] = (correct_preds_by_type == 3).sum()
+        Num_GT_attr_per_class[k_num, 4] = (correct_preds_by_type == 4).sum()
+        Num_GT_attr_per_class[k_num, 5] = (correct_preds_by_type == 5).sum()
+        Sum_all_corr_attr[k_num] = correct_topk_preds.sum(0)
         Sum_all_gt_attr[k_num] = target_binary.sum(0)
         #logging.info("Number of groundtruth %f/%f/%f/%f/%f " % (Num_GT_attr_per_class[k_num, 1], Num_GT_attr_per_class[k_num, 2],Num_GT_attr_per_class[k_num, 3],Num_GT_attr_per_class[k_num, 4],Num_GT_attr_per_class[k_num, 5]))
         #logging.info("Number of Corrected attr per type %f/%f/%f/%f/%f " % (correct_attr_type[k_num, 1], correct_attr_type[k_num, 2],correct_attr_type[k_num, 3],correct_attr_type[k_num, 4],correct_attr_type[k_num, 5]))
@@ -200,18 +213,25 @@ def train(model, criterion_softmax, criterion_binary, train_set, val_set, opt):
     total_batch_iter = 0
     logging.info("####################Train Model###################")
     _, attr_type = get_attr_name(opt)
-    for epoch in range(opt.sum_epoch):
+    for epoch in range(opt.epochs):
         epoch_start_t = time.time()
         epoch_batch_iter = 0
         logging.info('Begin of epoch %d' % (epoch))
+
+        pbar = tqdm(total=len(train_set))
         for i, data in enumerate(train_set):
             inputs, target_softmax,target_binary = data
            # print(inputs.size())
            # print(target_binary.size())
-            output_binary, output_softmax, bin_loss, cls_loss = forward_batch(model, criterion_softmax, criterion_binary, inputs, target_softmax,target_binary, opt, "Train")
+            output_binary, output_softmax, bin_loss, cls_loss = forward_batch(
+                model,
+                criterion_softmax, criterion_binary,
+                inputs,
+                target_softmax, target_binary,
+                opt, "Train")
             optimizer.zero_grad()
             loss = bin_loss + cls_loss
-            loss_list = [bin_loss[0],cls_loss[0]]
+            loss_list = [bin_loss.item(), cls_loss.item()]
             loss.backward()
             optimizer.step()
 
@@ -220,10 +240,20 @@ def train(model, criterion_softmax, criterion_binary, train_set, val_set, opt):
             total_batch_iter += 1
 
             # display train loss and accuracy
-            if total_batch_iter % opt.display_train_freq == 0:
+            if epoch % opt.display_train_freq == 0:
                 # accuracy
 
-                batch_accuracy_soft,Num_correct_attr_type, Num_GT_attr_per_class, Correct_pred_pre_attr, GT_attr_per_attr = calc_accuracy(output_binary, output_softmax, target_softmax,target_binary, opt.score_thres, opt.top_k,attr_type)
+                acc_outputs = calc_accuracy(output_binary,
+                                            output_softmax,
+                                            target_softmax, target_binary,
+                                            opt.score_thres,
+                                            opt.top_k,
+                                            attr_type)
+                batch_accuracy_soft, Num_correct_attr_type, Num_GT_attr_per_class, Correct_pred_pre_attr, GT_attr_per_attr = acc_outputs
+
+                #acc_soft, correct_attr_type, Num_GT_attr_per_class,  Sum_all_corr_attr, Sum_all_gt_attr
+
+                
                 batch_accuracy_bin=Num_correct_attr_type[1]/Num_GT_attr_per_class[1]
                 util.print_loss(loss_list, "Train", epoch, total_batch_iter)
                 util.print_accuracy_soft(batch_accuracy_soft, "Train", epoch, total_batch_iter)
@@ -236,7 +266,12 @@ def train(model, criterion_softmax, criterion_binary, train_set, val_set, opt):
                save_model(model, opt, epoch)
                # TODO snapshot loss and accuracy
 
+            pbar.update(1)
+            pbar.set_postfix({'epoch': epoch+1, 'bin_loss': loss_list[0], 'cls_loss': loss_list[1]})
+
             # validate and display validate loss and accuracy
+        pbar.close()
+        
         if len(val_set) > 0:
            avg_val_accuracy, avg_acc_per_type, avg_acc_per_attr, avg_val_loss = validate(model, criterion_softmax, criterion_binary, val_set, opt)
            util.print_loss(avg_val_loss, "Validate", epoch, total_batch_iter)
@@ -284,18 +319,23 @@ def test(model, criterion_softmax, criterion_binary, test_set, opt):
 
 
 def main():
+
+
+    print("parse opt...")
+    
     # parse options
     op = Options()
     opt = op.parse()
 
     # initialize train or test working dir
     trainer_dir = "trainer_" + opt.name
-    opt.model_dir = os.path.join(opt.dir, trainer_dir, "Train_512_unweighted")
-    opt.data_dir = os.path.join(opt.dir, trainer_dir, "Data")
-    opt.test_dir = os.path.join(opt.dir, trainer_dir, "Test")
+    opt.model_dir = os.path.join("results", trainer_dir, "Train_res18_512")
+    #opt.data_dir = os.path.join(opt.data_dir, trainer_dir, "Data")
+    opt.test_dir = os.path.join(opt.data_dir, trainer_dir, "Test")
 
-    if not os.path.exists(opt.data_dir):
-        os.makedirs(opt.data_dir)
+    # why need to make the data dir??
+    #if not os.path.exists(opt.data_dir):
+    #    os.makedirs(opt.data_dir)
     if opt.mode == "Train":
         if not os.path.exists(opt.model_dir):
             os.makedirs(opt.model_dir)
@@ -351,15 +391,25 @@ def main():
 
 
     #----------
-    train_sampler = SubsetRandomSampler(train_idx)
+    train_sampler = SubsetRandomSampler(train_idx.astype(np.int32))
     # validation Set
-    validation_sampler = SubsetRandomSampler(validation_idx)
+    validation_sampler = SubsetRandomSampler(validation_idx.astype(np.int32))
     # Test set
-    test_sampler = SubsetRandomSampler(test_idx)
+    test_sampler = SubsetRandomSampler(test_idx.astype(np.int32))
 
-    train_set = DataLoader(ds, batch_size=opt.batch_size, shuffle=False, sampler=train_sampler)
-    val_set = DataLoader(ds, batch_size=opt.batch_size, shuffle=False, sampler=validation_sampler)
-    test_set = DataLoader(ds, batch_size=opt.batch_size, shuffle=False, sampler=test_sampler)
+    train_set = DataLoader(ds,
+                           batch_size=opt.batch_size,
+                           shuffle=False,
+                           sampler=train_sampler,
+                           num_workers=opt.num_workers)
+    val_set = DataLoader(ds,
+                         batch_size=opt.batch_size,
+                         shuffle=False,
+                         sampler=validation_sampler)
+    test_set = DataLoader(ds,
+                          batch_size=opt.batch_size,
+                          shuffle=False,
+                          sampler=test_sampler)
 
 
     num_classes = [opt.numctg,opt.numattri] #temporary lets put the number of class []
