@@ -19,10 +19,10 @@ class Fashion_model(nn.Module):
         self.num_classes = num_classes
         self.basemodel = torch.nn.Sequential(*list(net_.children())[:-1])
         # TODO: clean this up
-        self.tmp_input = (torch.randn(1, opt.input_channel, opt.input_size, opt.input_size))
+        self.tmp_input = (torch.randn(1, opt.input_channel, opt.crop_size, opt.crop_size))
         self.tmp_output = self.basemodel(self.tmp_input)
         self.output_dim = int(self.tmp_output.size()[1])
-        print(self.output_dim)
+        print("output dim", self.tmp_output.shape)
         #self.output_dim = 512
         for index, num_class in enumerate(num_classes):
             setattr(self, "FullyConnectedLayer_" + str(index), nn.Linear(self.output_dim, num_class))

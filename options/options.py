@@ -13,8 +13,10 @@ class Options():
         self.parser.add_argument('--Try', default='1', help='First Division of DataSet into train, Val and test')
         self.parser.add_argument('--mode', default='Train', help='run mode of training or testing. [Train | Test | train | test]')
         self.parser.add_argument('--model', default='Resnet', help='model type. [Alexnet | LightenB | VGG16 | Resnet18 | ...]')
-        self.parser.add_argument('--load_size', type=int, default = 512, help='scale image to the size prepared for croping')
-        self.parser.add_argument('--input_size', type=int, default = 512, help='then crop image to the size as network input')
+        
+        self.parser.add_argument('--img_size', type=int, default=256, help='scale image to the size prepared for croping')
+        self.parser.add_argument('--crop_size', type=int, default=224, help='then crop image to the size as network input')
+        
         self.parser.add_argument('--ratio', type=str, default='[0.9, 0.5, 0.5]', help='ratio of whole dataset for Train, Validate, Test resperctively')
         self.parser.add_argument('--batch_size', type=int, default=64, help='batch size of network input. Note that batch_size should only set to 1 in Test mode')
         self.parser.add_argument('--shuffle', action='store_true', help='default false. If true, data will be shuffled when split dataset and in batch')
@@ -36,7 +38,7 @@ class Options():
         self.parser.add_argument('--validate_ratio', type=float, default=0.1, help='ratio of validate set when validate model')
         self.parser.add_argument('--numctg', type=int, default=50, help='Number of cloth categories')
         self.parser.add_argument('--numattri', type=int, default=1000, help='Number of attribute')
-        self.parser.add_argument('--sum_epoch', type=int, default=100, help='sum epoches for training')
+        self.parser.add_argument('--epochs', type=int, default=100, help='number of epochs for training')
         self.parser.add_argument('--save_epoch_freq', type=int, default=1, help='save snapshot every $save_epoch_freq epoches training')
         self.parser.add_argument('--save_batch_iter_freq', type=int, default=1000, help='save snapshot every $save_batch_iter_freq training') 
         self.parser.add_argument('--lr', type=float, default=1e-4, help='initial learning rate')
@@ -63,7 +65,10 @@ class Options():
         self.parser.add_argument('--image_ncols', type=int, default=0, help='if positive, display all images in a single visdom web panel with certain number of images per row.')
         self.parser.add_argument('--html', action='store_false', help='defalt true. Do not save intermediate training results to [opt.dir]/[opt.name]/web/')
         self.parser.add_argument('--update_html_freq', type=int, default=10, help='frequency of saving training results to html')
-        self.parser.add_argument('--display_train_freq', type=int, default=1000, help='print train loss and accuracy every $train_freq batches iteration')
+        
+        self.parser.add_argument('--display_train_freq', type=int, default=1, help='print train loss and accuracy every $train_freq epochs')
+
+        
         self.parser.add_argument('--display_validate_freq', type=int, default=1, help='test validate dateset every $validate_freq batches iteration')
         self.parser.add_argument('--display_data_freq', type=int, default=1, help='frequency of showing training data on web browser')
         self.parser.add_argument('--display_image_ratio', type=float, default=2.0, help='ratio of images in a batch showing on web browser')
