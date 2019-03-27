@@ -10,9 +10,57 @@ BAD_FILENAMES = [
     "Crinkled_Satin_Halter_Dress/img_00000036.jpg"
 ]
 
+# NOTE: the string names in both attr and category
+# files do align, so we don't need to worry about
+# this.
+
+def get_list_attr_img(root):
+    filename = "%s/Anno/list_attr_img.txt" % root
+    f = open(filename)
+    # Skip the first two lines.
+    f.readline() # num files
+    f.readline() # header
+    # Process line-by-line.
+    filenames = []
+    attrs = []
+    for line in f:
+        line = line.rstrip().split()
+        filename = line[0].replace("img/", "")
+        if filename in BAD_FILENAMES:
+            continue
+        attr = [elem.replace("-1", "0") for elem in line[1::]]
+        attr = torch.FloatTensor([float(x) for x in attr])
+        filenames.append(filename)
+        attrs.append(attr)
+    f.close()
+    return filenames, attrs
+
+def get_list_category_img(root):
+    filename = "%s/Anno/list_category_img.txt" % root
+    f = open(filename)
+    # Skip the first two lines.
+    num_files = int(f.readline())
+    f.readline()
+    categories = []
+    # Process line-by-line.
+    for line in f:
+        line = line.rstrip().split()
+        filename = line[0].replace("img/", "")
+        if filename in BAD_FILENAMES:
+            continue
+        category = int(line[-1])
+        categories.append(category)
+    f.close()
+    return categories
+
+
 class DeepFashionDataset(Dataset):
     def __init__(self,
                  root,
+                 filenames,
+                 indices,
+                 attrs,
+                 categories,
                  img_size=256,
                  crop_size=224,
                  mean=0.5,
@@ -25,84 +73,28 @@ class DeepFashionDataset(Dataset):
           
         """
         super(DeepFashionDataset, self).__init__()
+        assert len(filenames) == len(attrs) == len(categories)
         # self.transform = transforms.Compose(transforms_)
         self.root = root
+        self.indices = indices
         # Store information about the dataset.
-        self.filenames = None
-        self.attrs = None
-        self.categories = None
-        # Read the metadata files.
-        self.get_list_attr_img()
-        self.get_list_category_img()
+        self.filenames = filenames
+        self.attrs = attrs
+        self.categories = categories
         self.transformer = get_transformer(img_size=img_size,
                                            crop_size=crop_size,
                                            mean=mean,
                                            std=std)
 
-    def get_list_attr_img(self):
-        filename = "%s/Anno/list_attr_img.txt" % self.root
-        f = open(filename)
-        # Skip the first two lines.
-        num_files = int(f.readline())
-        #self.filenames = [None] * num_files
-        #self.attrs = [None] * num_files
-        f.readline()
-        # Process line-by-line.
-        filenames = []
-        attrs = []
-        for line in f:
-            line = line.rstrip().split()
-            filename = line[0].replace("img/", "")
-            if filename not in BAD_FILENAMES:
-                attr = [elem.replace("-1", "0") for elem in line[1::]]
-                attr = torch.FloatTensor([float(x) for x in attr])
-                filenames.append(filename)
-                attrs.append(attr)
-            #self.filenames[i] = filename
-            #self.attrs[i] = attr
-        f.close()
-        self.filenames = filenames
-        self.attrs = attrs
-
-    def get_list_category_img(self):
-        filename = "%s/Anno/list_category_img.txt" % self.root
-        f = open(filename)
-        # Skip the first two lines.
-        num_files = int(f.readline())
-        self.categories = [None] * num_files
-        f.readline()
-        # Process line-by-line.
-        i = 0
-        for line in f:
-            line = line.rstrip().split()
-            filename = line[0].replace("img/", "")
-            category = int(line[-1])
-            self.categories[i] = category
-            i = i+1
-        f.close()
-
     def __getitem__(self, index):
-        filepath = "%s/DF_Img/img/%s" % (self.root, self.filenames[index])
-        #img_type = imghdr.what(filepath)
-        """
-        try:
-            open_img = Image.open(filepath)
-            open_img = open_img.convert("RGB")
-        except:
-            print('can not open the image')
-            print(filepath)
-        try:
-            tmp_img = self.transformer(open_img)
-        except:
-            print('can not transfer the image')
-            print(filepath)
-        """
+        this_idx = self.indices[index]
+        filepath = "%s/DF_Img/img/%s" % (self.root, self.filenames[this_idx])
         img = Image.open(filepath)
         img = img.convert("RGB")
         img = self.transformer(img)
-        attr_label = self.attrs[int(index)]
-        category_label = self.categories[int(index)]
+        attr_label = self.attrs[this_idx]
+        category_label = self.categories[this_idx]
         return img, category_label, attr_label
 
     def __len__(self):
-        return len(self.filenames)
+        return len(self.indices)

@@ -1,30 +1,23 @@
 import os
 import sys
 import time
-import copy
-import random
 import logging
 import numpy as np
 import torch
 from operator import add
-print ("Pytorch Version: ", torch.__version__)
 import torch.nn as nn
 import torch.optim as optim
-import torch.backends.cudnn as cudnn
-from torch.autograd import Variable
-from collections import OrderedDict, defaultdict
-from data.dataset_fashion import DeepFashionDataset
+from data.dataset_fashion import (DeepFashionDataset,
+                                  get_list_attr_img,
+                                  get_list_category_img)
 from models.model import Fashion_model, save_model
 from options.options import Options
 from torch.utils.data import DataLoader
-from torch.utils.data.sampler import SubsetRandomSampler
 from util import util
-from data.input import get_attr_name, get_Ctg_name,get_weight_attr_img
-#from random import *
+from data.input import get_attr_name, get_Ctg_name, get_weight_attr_img
 from random import sample
-#approach like this
-#  https://www.ritchievink.com/blog/2018/04/12/transfer-learning-with-pytorch-assessing-road-safety-with-computer-vision/
 from tqdm import tqdm
+import pickle
 
 def forward_batch(model, criterion_softmax, criterion_binary, inputs, target_softmax,target_binary, opt, phase):
     if opt.cuda:
@@ -199,8 +192,10 @@ def train(model, criterion_softmax, criterion_binary, train_set, val_set, opt):
         
         total_dict = {} # record per-minibatch metrics
         pbar = tqdm(total=len(train_set))
+        
         for i, data in enumerate(train_set):
             inputs, target_softmax,target_binary = data
+            
            # print(inputs.size())
            # print(target_binary.size())
             output_binary, output_softmax, bin_loss, cls_loss = forward_batch(
@@ -315,9 +310,11 @@ def main():
 
     # initialize train or test working dir
     trainer_dir = "trainer_" + opt.name
-    opt.model_dir = os.path.join("results", trainer_dir, "Train_res18_512")
+    opt.model_dir = os.path.join("results", trainer_dir, opt.name)
+    logging.info("Model directory: %s" % opt.model_dir)
     #opt.data_dir = os.path.join(opt.data_dir, trainer_dir, "Data")
     opt.test_dir = os.path.join(opt.data_dir, trainer_dir, "Test")
+    logging.info("Test directory: %s" % opt.test_dir)
 
     # why need to make the data dir??
     #if not os.path.exists(opt.data_dir):
@@ -348,38 +345,75 @@ def main():
     log_level = logging.INFO
     logging.getLogger().setLevel(log_level)
 
-    # load train or test data
-    ds = DeepFashionDataset(root=opt.data_dir)
-    num_data = len(ds)
-    #print(num_data)
-    indices = list(range(num_data))
+    '''
+    pkl_file = "%s/metadata.pkl" % opt.data_dir
+    if not os.path.exists(pkl_file):
+        # If metadata file does not exist, manually create it
+        # from the txt files and save a pkl.
+        filenames, attrs = get_list_attr_img(opt.data_dir)
+        categories = get_list_category_img(opt.data_dir)
+        with open(pkl_file, "wb") as f:
+            pickle.dump({'filenames': filenames,
+                         'attrs': attrs,
+                         'categories': categories}, f)
+    else:
+        logging.info("Found %s..." % pkl_file)
+        with open(pkl_file, "rb") as f:
+            dat = pickle.load(f)
+            filenames = dat['filenames']
+            attrs = dat['attrs']
+            categories = dat['categories']
+    '''
+
+    filenames, attrs = get_list_attr_img(opt.data_dir)
+    categories = get_list_category_img(opt.data_dir)
+    
+    indices = list(range(len(filenames)))
     rnd_state = np.random.RandomState(0)
     rnd_state.shuffle(indices)
     train_idx = indices[0:int(0.9*len(indices))]
     valid_idx = indices[int(0.9*len(indices)):int(0.95*len(indices))]
     test_idx = indices[int(0.95*len(indices))::]
 
-    print(len(train_idx), len(valid_idx), len(test_idx))
-    train_sampler = SubsetRandomSampler(train_idx.astype(np.int32))
-    validation_sampler = SubsetRandomSampler(valid_idx.astype(np.int32))
-    test_sampler = SubsetRandomSampler(test_idx.astype(np.int32))
+    # Define datasets.
+    ds_train = DeepFashionDataset(root=opt.data_dir,
+                                  filenames=filenames,
+                                  indices=train_idx,
+                                  attrs=attrs,
+                                  categories=categories,
+                                  img_size=opt.img_size,
+                                  crop_size=opt.crop_size)
+    ds_valid = DeepFashionDataset(root=opt.data_dir,
+                                  filenames=filenames,
+                                  indices=valid_idx,
+                                  attrs=attrs,
+                                  categories=categories,
+                                  img_size=opt.img_size,
+                                  crop_size=opt.crop_size)
+    '''
+    ds_test = DeepFashionDataset(root=opt.data_dir,
+                                 indices=test_idx,
+                                 img_size=opt.img_size,
+                                 crop_size=opt.crop_size)
+    '''
+    # Define data loaders.
+    loader_train = DataLoader(ds_train,
+                              shuffle=True,
+                              batch_size=opt.batch_size,
+                              num_workers=opt.num_workers)
+    loader_valid = DataLoader(ds_valid,
+                              shuffle=False,
+                              batch_size=opt.batch_size,
+                              num_workers=1)
+    '''
+    loader_test = DataLoader(ds_train,
+                             shuffle=False,
+                             batch_size=opt.batch_size,
+                             num_workers=1)
+    '''
+    
 
-    train_set = DataLoader(ds,
-                           batch_size=opt.batch_size,
-                           shuffle=True,
-                           sampler=train_sampler,
-                           num_workers=opt.num_workers)
-    val_set = DataLoader(ds,
-                         batch_size=opt.batch_size,
-                         shuffle=False,
-                         sampler=validation_sampler)
-    test_set = DataLoader(ds,
-                          batch_size=opt.batch_size,
-                          shuffle=False,
-                          sampler=test_sampler)
-
-
-    num_classes = [opt.numctg,opt.numattri] #temporary lets put the number of class []
+    num_classes = [opt.numctg, opt.numattri] #temporary lets put the number of class []
     opt.class_num = len(num_classes)
 
     # load model
@@ -419,10 +453,10 @@ def main():
 
     # Train model
     if opt.mode == "Train":
-        train(model, criterion_softmax,criterion_binary, train_set, val_set, opt)
+        train(model, criterion_softmax,criterion_binary, loader_train, loader_valid, opt)
     # Test model
     elif opt.mode == "Test":
-        test(model, criterion_softmax,criterion_binary, val_set, opt)
+        test(model, criterion_softmax,criterion_binary, loader_valid, opt)
 
 
 if __name__ == "__main__":
