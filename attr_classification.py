@@ -349,43 +349,24 @@ def main():
     logging.getLogger().setLevel(log_level)
 
     # load train or test data
-    ds = DeepFashionDataset(opt)
+    ds = DeepFashionDataset(root=opt.data_dir)
     num_data = len(ds)
     #print(num_data)
     indices = list(range(num_data))
-    if os.path.isfile("train_idx_%s%s" % (opt.Try,'.txt')):
-        test_idx = np.loadtxt(open("Test_idx_%s%s" % (opt.Try, '.txt'), 'rb'))
-        train_idx = np.loadtxt(open("train_idx_%s%s" % (opt.Try, '.txt'), 'rb'))
-        validation_idx = np.loadtxt(open("validation_idx_%s%s" % (opt.Try, '.txt'), 'rb'))
-    else:
-        split = int((opt.ratio[0]) * num_data)
-        train_idx = np.random.choice(indices, size=split, replace=False)
-       # print(len(train_idx))
-        validation_Test_idx = list(set(indices) - set(train_idx))
-        #save train_idx
-        np.savetxt("train_idx_%s%s" % (opt.Try,'.txt'), train_idx, fmt='%i', delimiter=",")
-        split = int(round(opt.ratio[1] * len(validation_Test_idx)))
-        validation_idx = np.random.choice(validation_Test_idx, size=split, replace=False)
-       # print(len(validation_idx))
-        # Save Validation Set idx
-        np.savetxt("validation_idx_%s%s" % (opt.Try,'.txt'), validation_idx.astype(int), fmt='%i', delimiter=",")
-        tmp_test_idx = list(set(validation_Test_idx) - set(validation_idx))
-        test_idx = np.random.choice(validation_Test_idx, size=len(tmp_test_idx), replace=False)
-       # print(len(test_idx))
-        #Save test idx
-        np.savetxt("Test_idx_%s%s" % (opt.Try,'.txt'), test_idx, fmt='%i', delimiter=",")
+    rnd_state = np.random.RandomState(0)
+    rnd_state.shuffle(indices)
+    train_idx = indices[0:int(0.9*len(indices))]
+    valid_idx = indices[int(0.9*len(indices)):int(0.95*len(indices))]
+    test_idx = indices[int(0.95*len(indices))::]
 
-
-    #----------
+    print(len(train_idx), len(valid_idx), len(test_idx))
     train_sampler = SubsetRandomSampler(train_idx.astype(np.int32))
-    # validation Set
-    validation_sampler = SubsetRandomSampler(validation_idx.astype(np.int32))
-    # Test set
+    validation_sampler = SubsetRandomSampler(valid_idx.astype(np.int32))
     test_sampler = SubsetRandomSampler(test_idx.astype(np.int32))
 
     train_set = DataLoader(ds,
                            batch_size=opt.batch_size,
-                           shuffle=False,
+                           shuffle=True,
                            sampler=train_sampler,
                            num_workers=opt.num_workers)
     val_set = DataLoader(ds,

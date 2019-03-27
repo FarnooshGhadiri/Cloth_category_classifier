@@ -1,28 +1,11 @@
-import copy
 from PIL import Image
 from torchvision import transforms
 
-
-def get_transformer(opt):
+def get_transformer(img_size, crop_size, mean, std):
     transform_list = []
-    
-    # resize  
-    osize = [opt.load_size, opt.load_size]
-    transform_list.append(transforms.Resize(osize, Image.BICUBIC))
-    
-
-    # flip
-    if opt.mode == "Train" and opt.flip:
-        transform_list.append(transforms.RandomHorizontalFlip())
-        print('Flip the image')
-
-    # to tensor
+    transform_list.append(transforms.Resize(img_size, Image.BICUBIC))
+    transform_list.append(transforms.RandomCrop(crop_size))
+    transform_list.append(transforms.RandomHorizontalFlip())
     transform_list.append(transforms.ToTensor())
-    
-    # If you make changes here, you should also modified 
-    # function `tensor2im` in util/util.py accordingly
-    transform_list.append(transforms.Normalize(opt.mean, opt.std))
-
+    transform_list.append(transforms.Normalize(mean, std))
     return transforms.Compose(transform_list)
-
-
