@@ -134,10 +134,11 @@ def calc_accuracy(output_binary, output_softmax, target_softmax,target_binary, s
     # It is not a fair accuracy computation if total number of actual labels (GT)in the ground truth is bigger than k. To compensate this, we make a new dynamic ground truth for each sample
     # Make a new ground truth for each sample : keep those actual attributes that are matched to the predicted attributes (Correct_pred_bin)by CAC (Cloth Attribute classification), 
     # then select P (P= K-number of correctly annotated attributes)attributes randomly from (1-{GT-Correct_pred_bin}) list.
-    # Ex: GT={1,1,1,0,1,1 and zero for all other (1000-6) attributes}
+    # Ex: GT={1,1,1,0,1,1 and zero for all other (1000-6) attributes} 
     # Pre_attr={1,0,1 and zero for all other (1000-6) attributes }
     # New-GT={1,0,1,0,1,0 and zero for all other (1000-6) attributes }
-    #sample from the remaining
+    # With this new computation, if k=3 and we predicted 3 corrected attributes, accuracy is 100%.
+    
     for k in top_k:
         target_binary=S_target_binary
         _, pred2 = output_binary.data.cpu().topk(k, 1, True, True)
