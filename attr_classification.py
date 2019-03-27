@@ -138,57 +138,37 @@ def calc_accuracy(output_binary, output_softmax, target_softmax,target_binary, s
             correct_k = correct[:k].view(-1).float().sum(0).item()
             cls_acc_dict["cls_acc_top%i" % k] = correct_k / batch_size
 
-        #Calculating accuracy for attribute
-
-        # print(attr_type)
-        Num_GT_attr_per_class = torch.zeros(len(top_k), 6,
-                                            dtype=torch.float)  # all attr, Texture, fabric, Shape, part, style
-        #correct_attr_type = torch.zeros(len(top_k), 6, dtype=torch.float)  # all attr, Texture, fabric, Shape, part, style
-
         bin_acc_dict = {}
         for k in top_k:
             # Get the top-k indices for the attribute prediction.
             _, pred_bin = output_binary.data.cpu().topk(k, 1, True, True)
+
+            # Ok, we want to compute the recall@k for each of the attribute
+            # categories.
+            recalls_at_k = {j:[] for j in range(1, 6)}
+            for j in range(1, 6):
+                mask_j = (attr_type_num == j).float()
+                mask_not_j = (attr_type_num != j).long()
+                # Get the binary predictions, then make -ve the attribute indices
+                # which are NOT attribute j. That way, when we consider top-k for
+                # predictions, it is only amongst the indices coding for category j.
+                preds_for_j = output_binary.data.cpu()
+                preds_for_j[:, mask_not_j] = -1.
+                _, preds_topk = preds_for_j.topk(k, 1, True, True)
+                # TODO: batchify this??
+                for b in range(batch_size):
+                    # Extract the ground truth indices for attribute category j.
+                    this_gt_indices = np.where( (target_binary[b, :]*mask_j).numpy() )[0]
+                    # Extract the top-k indices for attribute category j.
+                    this_pred_indices = preds_topk[b, :].numpy()
+                    if len(this_gt_indices) > 0:
+                        # If there are ground truth indices associated with category j...
+                        n_correct = len(set(this_gt_indices).intersection(set(this_pred_indices)))
+                        denominator = min(k, len(this_gt_indices))
+                        recalls_at_k[j].append(n_correct / denominator)
             
-            topk_indices = None
-            for i in range(len(pred_bin)):
-                tmp_output = indices_to_binary(pred_bin[i], output_binary.size(1))
-                if i == 0:
-                    topk_indices = tmp_output.view(1, output_binary.size(1))
-                else:
-                    topk_indices = torch.cat((tmp_output.view(1, output_binary.size(1)),
-                                              topk_indices), 0)
-
-            correct_topk_preds = topk_indices.float() * target_binary
-            # This is a (bs, 1000) matrix where numbers > 0 are ground truths
-            # denoting the attribute type they belong from (from 1...5).
-            target_attr_by_type = target_binary * attr_type_num.repeat(batch_size, 1)
-            # Same thing but for predictions.
-            correct_preds_by_type = torch.zeros_like(target_attr_by_type)
-            for b in range(batch_size):
-                num_correct_preds = int(correct_topk_preds[b, :].sum()) # according to top-k
-                if target_binary[b, :].sum() > k and num_correct_preds < k:
-                    # If the # of ground truths is > k and the number of correct predictions != k, then
-                    # Sample correct non-top-k predictions, k-num_correct_preds of them
-                    correct_non_topk_preds = (1. - topk_indices) * target_binary
-                    sampled_correct_non_topk_preds = (correct_non_topk_preds[b, :] == 1).nonzero().view(-1)
-                    rand_perm = torch.randperm(len(sampled_correct_non_topk_preds))
-                    sampled_correct_non_topk_preds = sampled_correct_non_topk_preds[ rand_perm ][0:(k-num_correct_preds)]
-                    tmp_binary = torch.zeros(target_binary.size(1))
-                    tmp_binary[sampled_correct_non_topk_preds] = 1
-                    sampled_correct_non_topk_preds = tmp_binary
-                    # Correct predictions include both the correct top-k ones and the sampled ones we did
-                    # from non-top-k.
-                    import pdb
-                    pdb.set_trace()
-                    correct_preds_by_type[b, :] = target_attr_by_type[b, :] * sampled_correct_non_topk_preds + \
-                                                  target_attr_by_type[b, :] * correct_topk_preds[b, :]
-                else:
-                    # Nothing special needs to be done here.
-                    correct_preds_by_type[b, :] = target_attr_by_type[b, :] * correct_topk_preds[b, :]
-
-            for j in range(1, 5+1):
-                bin_acc_dict["bin_acc%i_top%i" % (j, k)] = (correct_preds_by_type == j).float().mean().item()
+            for j in range(1, 6):
+                bin_acc_dict["bin_acc%i_top%i" % (j, k)] = np.mean(recalls_at_k[j])
 
         # Merge the two dictionaries together.
         cls_acc_dict.update(bin_acc_dict)
@@ -205,10 +185,19 @@ def train(model, criterion_softmax, criterion_binary, train_set, val_set, opt):
     total_batch_iter = 0
     logging.info("####################Train Model###################")
     _, attr_type = get_attr_name(opt)
+
+    csv_file = "%s/results.txt" % opt.model_dir
+    if not os.path.exists(csv_file):
+        write_mode = 'w'
+    else:
+        write_mode = 'a'
+    f_csv = open("%s/results.txt" % opt.model_dir, write_mode)
+    
     for epoch in range(opt.epochs):
         epoch_start_t = time.time()
         logging.info('Begin of epoch %d' % (epoch))
-
+        
+        total_dict = {} # record per-minibatch metrics
         pbar = tqdm(total=len(train_set))
         for i, data in enumerate(train_set):
             inputs, target_softmax,target_binary = data
@@ -239,18 +228,6 @@ def train(model, criterion_softmax, criterion_binary, train_set, val_set, opt):
                                             opt.top_k,
                                             attr_type)
 
-                """
-                batch_accuracy_soft, Num_correct_attr_type, Num_GT_attr_per_class, Correct_pred_pre_attr, GT_attr_per_attr = acc_outputs
-
-                #acc_soft, correct_attr_type, Num_GT_attr_per_class,  Sum_all_corr_attr, Sum_all_gt_attr
-
-                
-                batch_accuracy_bin=Num_correct_attr_type[1]/Num_GT_attr_per_class[1]
-                util.print_loss(loss_list, "Train", epoch, total_batch_iter)
-                util.print_accuracy_soft(batch_accuracy_soft, "Train", epoch, total_batch_iter)
-                util.print_accuracy_attr(batch_accuracy_bin, [], "Train", epoch, total_batch_iter)
-                #util.print_accuracy_bin(batch_accuracy_bin, "Train", epoch, total_batch_iter)
-                """
 
                 # save snapshot
             if total_batch_iter % opt.save_batch_iter_freq == 0:
@@ -263,9 +240,23 @@ def train(model, criterion_softmax, criterion_binary, train_set, val_set, opt):
             pbar_dict.update(acc_outputs)
             pbar.set_postfix(pbar_dict)
 
+            for key in pbar_dict:
+                if key not in total_dict:
+                    total_dict[key] = []
+                total_dict[key].append(pbar_dict[key])
+
             # validate and display validate loss and accuracy
         pbar.close()
-        
+
+        if write_mode == 'w' and epoch == 0:
+            csv_header = ",".join([key for key in total_dict])
+            f_csv.write(csv_header + "\n")
+            f_csv.flush()
+        csv_values = ",".join([ str(np.mean(total_dict[key])) for key in total_dict ])
+        f_csv.write(csv_values + "\n")
+        f_csv.flush()
+
+        '''
         if len(val_set) > 0:
            avg_val_accuracy, avg_acc_per_type, avg_acc_per_attr, avg_val_loss = validate(model, criterion_softmax, criterion_binary, val_set, opt)
            util.print_loss(avg_val_loss, "Validate", epoch, total_batch_iter)
@@ -275,6 +266,7 @@ def train(model, criterion_softmax, criterion_binary, train_set, val_set, opt):
                # if opt.display_id > 0:
                   #  webvis.plot_points(x_axis, val_loss, "Loss", "Validate")
                   # webvis.plot_points(x_axis, accuracy_list, "Accuracy", "Validate")
+        '''
 
 
       #  logging.info('End of epoch %d / %d \t Time Taken: %d sec' %
