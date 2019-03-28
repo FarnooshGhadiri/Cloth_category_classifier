@@ -9,12 +9,13 @@ import torch.nn as nn
 import torch.optim as optim
 from data.dataset_fashion import (DeepFashionDataset,
                                   get_list_attr_img,
-                                  get_list_category_img)
+                                  get_list_category_img,
+                                  get_weight_attr_img)
 from models.model import Fashion_model, save_model
 from options.options import Options
 from torch.utils.data import DataLoader
 from util import util
-from data.input import get_attr_name, get_Ctg_name, get_weight_attr_img
+from data.input import get_attr_name, get_Ctg_name
 from random import sample
 from tqdm import tqdm
 import pickle
@@ -23,11 +24,11 @@ def forward_batch(model, criterion_softmax, criterion_binary, inputs, target_sof
     if opt.cuda:
         inputs = inputs.cuda(opt.devices[0])
 
-    if phase in ["Train"]:
+    if phase in ["train"]:
         inputs_var = inputs
         # logging.info("Switch to Train Mode")
         model.train()
-    elif phase in ["Validate", "Test"]:
+    elif phase in ["valid", "test"]:
         with torch.no_grad():
           inputs_var = inputs
           # logging.info("Switch to Test Mode")
@@ -38,9 +39,9 @@ def forward_batch(model, criterion_softmax, criterion_binary, inputs, target_sof
         if len(opt.devices) > 1:
             output_softmax,output_binary = nn.parallel.data_parallel(model, inputs_var, opt.devices)
         else:
-            if phase in ["Train"]:
+            if phase in ["train"]:
                 output_softmax, output_binary = model(inputs_var)
-            elif phase in ["Validate", "Test"]:
+            elif phase in ["valid", "test"]:
                 with torch.no_grad():
                   output_softmax, output_binary = model(inputs_var)
     else:
@@ -78,13 +79,13 @@ def forward_dataset(model, criterion_softmax, criterion_binary, data_loader, opt
     avg_loss = [0,0]
     for i, data in enumerate(data_loader):
         #print(len(data_loader))
-        if opt.mode == "Test":
+        if opt.mode == "test":
             logging.info("test %s/%s image" % (i, len(data_loader)))
 
         sum_batch += 1
         inputs, target_softmax,target_binary = data
 
-        output_binary, output_softmax, bin_loss, cls_loss = forward_batch(model, criterion_softmax, criterion_binary, inputs, target_softmax,target_binary, opt, "Validate")
+        output_binary, output_softmax, bin_loss, cls_loss = forward_batch(model, criterion_softmax, criterion_binary, inputs, target_softmax,target_binary, opt, "valid")
         acc_softmax, Num_correct_attr_type, Num_GT_attr_per_class, Correct_pred_pre_attr, GT_attr_per_attr = calc_accuracy(output_binary, output_softmax, target_softmax,target_binary, opt.score_thres, opt.top_k,attr_type)
 
           # accumulate accuracy
@@ -117,7 +118,7 @@ def indices_to_binary(indices, length):
     tmp[indices] = 1
     return tmp
 
-def calc_accuracy(output_binary, output_softmax, target_softmax,target_binary, score_thres, top_k, attr_type_num):
+def calc_accuracy(output_binary, output_softmax, target_softmax, target_binary, score_thres, top_k, attr_type_num):
 
     with torch.no_grad():
     
@@ -169,13 +170,11 @@ def calc_accuracy(output_binary, output_softmax, target_softmax,target_binary, s
         return cls_acc_dict
 
 
-def train(model, criterion_softmax, criterion_binary, train_set, val_set, opt):
+def train(model, criterion_softmax, criterion_binary, train_loader, val_loader, opt):
 
     optimizer = optim.Adam(model.parameters(),lr=opt.lr)
 
     # record forward and backward times
-    train_batch_num = len(train_set)
-    total_batch_iter = 0
     logging.info("####################Train Model###################")
     _, attr_type = get_attr_name(opt)
 
@@ -187,34 +186,27 @@ def train(model, criterion_softmax, criterion_binary, train_set, val_set, opt):
     f_csv = open("%s/results.txt" % opt.model_dir, write_mode)
     
     for epoch in range(opt.epochs):
-        epoch_start_t = time.time()
-        logging.info('Begin of epoch %d' % (epoch))
+        start_time = time.time()
         
         total_dict = {} # record per-minibatch metrics
-        pbar = tqdm(total=len(train_set))
-        
-        for i, data in enumerate(train_set):
-            inputs, target_softmax,target_binary = data
+
+        for loader_tuple in [('train', train_loader), ('valid', val_loader)]:
+            loader_name, loader = loader_tuple
             
-           # print(inputs.size())
-           # print(target_binary.size())
-            output_binary, output_softmax, bin_loss, cls_loss = forward_batch(
-                model,
-                criterion_softmax, criterion_binary,
-                inputs,
-                target_softmax, target_binary,
-                opt, "Train")
-            optimizer.zero_grad()
-            loss = bin_loss + cls_loss
-            loss_list = [bin_loss.item(), cls_loss.item()]
-            loss.backward()
-            optimizer.step()
-
-            total_batch_iter += 1
-
-            # display train loss and accuracy
-            if epoch % opt.display_train_freq == 0:
-                # accuracy
+            pbar = tqdm(total=len(loader))
+            for i, data in enumerate(loader):
+                optimizer.zero_grad()
+                inputs, target_softmax, target_binary = data
+                output_binary, output_softmax, bin_loss, cls_loss = forward_batch(
+                    model,
+                    criterion_softmax, criterion_binary,
+                    inputs,
+                    target_softmax, target_binary,
+                    opt,
+                    loader_name)
+                loss = bin_loss + cls_loss
+                loss.backward()
+                optimizer.step()
 
                 acc_outputs = calc_accuracy(output_binary,
                                             output_softmax,
@@ -223,53 +215,39 @@ def train(model, criterion_softmax, criterion_binary, train_set, val_set, opt):
                                             opt.top_k,
                                             attr_type)
 
+                pbar.update(1)
+                pbar_dict = {'epoch': epoch+1,
+                             '%s_bin_loss' % loader_name: bin_loss.item(),
+                             '%s_cls_loss' % loader_name: cls_loss.item()}
+                for key in acc_outputs:
+                    pbar_dict["%s_%s" % (loader_name, key)] = acc_outputs[key]
+                pbar.set_postfix(pbar_dict)
+                print(loader_name)
 
-                # save snapshot
-            if total_batch_iter % opt.save_batch_iter_freq == 0:
-               logging.info("saving the latest model (epoch %d, total_batch_iter %d)" % (epoch, total_batch_iter))
-               save_model(model, opt, epoch)
-               # TODO snapshot loss and accuracy
+                for key in pbar_dict:
+                    if key not in total_dict:
+                        total_dict[key] = []
+                    total_dict[key].append(pbar_dict[key])
+                break
 
-            pbar.update(1)
-            pbar_dict = {'epoch': epoch+1, 'bin_loss': loss_list[0], 'cls_loss': loss_list[1]}
-            pbar_dict.update(acc_outputs)
-            pbar.set_postfix(pbar_dict)
-
-            for key in pbar_dict:
-                if key not in total_dict:
-                    total_dict[key] = []
-                total_dict[key].append(pbar_dict[key])
-
-            # validate and display validate loss and accuracy
         pbar.close()
+
+        total_dict['time'] = time.time() - start_time
 
         if write_mode == 'w' and epoch == 0:
             csv_header = ",".join([key for key in total_dict])
             f_csv.write(csv_header + "\n")
             f_csv.flush()
-        csv_values = ",".join([ str(np.mean(total_dict[key])) for key in total_dict ])
-        f_csv.write(csv_values + "\n")
+        csv_values_comma = ",".join([ str(np.mean(total_dict[key])) for key in total_dict ])
+        csv_values_tab = "\t".join([ str(np.mean(total_dict[key])) for key in total_dict ])
+        print(csv_values_tab)
+        f_csv.write(csv_values_comma + "\n")
         f_csv.flush()
 
-        '''
-        if len(val_set) > 0:
-           avg_val_accuracy, avg_acc_per_type, avg_acc_per_attr, avg_val_loss = validate(model, criterion_softmax, criterion_binary, val_set, opt)
-           util.print_loss(avg_val_loss, "Validate", epoch, total_batch_iter)
-           util.print_accuracy_soft(avg_val_accuracy, "Validate", epoch, total_batch_iter)
-           util.print_accuracy_attr(avg_acc_per_type,avg_acc_per_attr, "Validate", epoch, total_batch_iter)
-           #util.print_accuracy_bin(avg_val_accuracy_bin, "Validate", epoch, total_batch_iter)
-               # if opt.display_id > 0:
-                  #  webvis.plot_points(x_axis, val_loss, "Loss", "Validate")
-                  # webvis.plot_points(x_axis, accuracy_list, "Accuracy", "Validate")
-        '''
 
-
-      #  logging.info('End of epoch %d / %d \t Time Taken: %d sec' %
-                    # (epoch, opt.sum_epoch, time.time() - epoch_start_t))
-
-        if epoch % opt.save_epoch_freq == 0:
-            logging.info('saving the model at the end of epoch %d, iters %d' % (epoch + 1, total_batch_iter))
-            save_model(model, opt, epoch + 1)
+        #if epoch % opt.save_epoch_freq == 0:
+        #    logging.info('saving the model at the end of epoch %d, iters %d' % (epoch + 1, total_batch_iter))
+        save_model(model, opt, epoch + 1)
 
             # adjust learning rate
         #lr = optimizer.param_groups[0]['lr']
@@ -309,11 +287,10 @@ def main():
     opt = op.parse()
 
     # initialize train or test working dir
-    trainer_dir = "trainer_" + opt.name
-    opt.model_dir = os.path.join("results", trainer_dir, opt.name)
+    opt.model_dir = os.path.join("results", opt.name)
     logging.info("Model directory: %s" % opt.model_dir)
     #opt.data_dir = os.path.join(opt.data_dir, trainer_dir, "Data")
-    opt.test_dir = os.path.join(opt.data_dir, trainer_dir, "Test")
+    opt.test_dir = os.path.join(opt.data_dir, "Test")
     logging.info("Test directory: %s" % opt.test_dir)
 
     # why need to make the data dir??
@@ -443,20 +420,18 @@ def main():
     criterion_softmax = nn.CrossEntropyLoss() #weight=opt.loss_weight
     criterion_binary = torch.nn.BCELoss()
 
-
     # use cuda
     if opt.cuda:
         model = model.cuda(opt.devices[0])
         criterion_softmax = criterion_softmax.cuda(opt.devices[0])
         criterion_binary = criterion_binary.cuda(opt.devices[0])
-        #cudnn.benchmark = True
 
     # Train model
     if opt.mode == "Train":
-        train(model, criterion_softmax,criterion_binary, loader_train, loader_valid, opt)
+        train(model, criterion_softmax, criterion_binary, loader_train, loader_valid, opt)
     # Test model
     elif opt.mode == "Test":
-        test(model, criterion_softmax,criterion_binary, loader_valid, opt)
+        test(model, criterion_softmax, criterion_binary, loader_valid, opt)
 
 
 if __name__ == "__main__":
