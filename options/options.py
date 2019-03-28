@@ -7,35 +7,22 @@ class Options():
         self.parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
         
         self.parser.add_argument('--data_dir', default='/network/tmp1/ghadirif/DeepFashion', help='path to the data directory containing Img and annotation')
-        #self.parser.add_argument('--results_dir', default='/network/tmp1/ghadirif/DeepFashion', help='path to the data directory containing Img and annotation')
-        
+        #self.parser.add_argument('--results_dir', default='/network/tmp1/ghadirif/DeepFashion', help='path to the data directory containing Img and annotation')        
         self.parser.add_argument('--name', default='my_experiment', help='subdirectory name for training or testing, snapshot, splited dataset and test results exist here')
-        self.parser.add_argument('--Try', default='1', help='First Division of DataSet into train, Val and test')
         self.parser.add_argument('--mode', default='Train', help='run mode of training or testing. [Train | Test | train | test]')
-        self.parser.add_argument('--model', default='Resnet', help='model type. [Alexnet | LightenB | VGG16 | Resnet18 | ...]')
-        
         self.parser.add_argument('--img_size', type=int, default=256, help='scale image to the size prepared for croping')
         self.parser.add_argument('--crop_size', type=int, default=224, help='then crop image to the size as network input')
-        
-        self.parser.add_argument('--ratio', type=str, default='[0.9, 0.5, 0.5]', help='ratio of whole dataset for Train, Validate, Test resperctively')
         self.parser.add_argument('--batch_size', type=int, default=64, help='batch size of network input. Note that batch_size should only set to 1 in Test mode')
-        self.parser.add_argument('--shuffle', action='store_true', help='default false. If true, data will be shuffled when split dataset and in batch')
-        self.parser.add_argument('--flip', action='store_true',default='True', help='if true, flip image randomly before input into network')
-        self.parser.add_argument('--region', action='store_false', help='if true, crop image by input box')
         self.parser.add_argument('--num_workers', type=int, default=4, help='how many subprocesses to use for data loading')
-        self.parser.add_argument('--crop', type=str, default='CenterCrop', help='crop type, candidates are [NoCrop | RandomCrop | CenterCrop | FiveCrop | TenCrop]')
-        self.parser.add_argument('--gray', action='store_true', help='defalut false. If true, image will be converted to gray_scale')
         self.parser.add_argument('--gpu_ids', type=str, default='0', help='gpu ids: e.g. 0  0,1,2, 0,2. use -1 for CPU')
-        self.parser.add_argument('--box_ratio', type=float, default=-1, help='modify box ratio of width and height to specified ratio')
-        self.parser.add_argument('--box_scale', type=float, default=1.0, help='scale box to specified ratio. Default 1.0 means no change')
-        self.parser.add_argument('--input_channel', type=int, default=3, help='set input image channel, 1 for gray and 3 for color')
-        self.parser.add_argument('--mean', type=str, default='(0.5, 0.5, 0.5)', help='sequence of means for each channel used for normization')
-        self.parser.add_argument('--std', type=str, default='(0.5, 0.5, 0.5)', help='sequence standard deviations for each channel used for normization')
-        self.parser.add_argument('--padding', action='store_true', help='default false. If true, image will be padded if scaled box is out of image boundary')
+        self.parser.add_argument('--pos_weights', action='store_true', help='If true, use pos_weights with BCELossWithLogits')
+
+
+
         self.parser.add_argument('--checkpoint_name', type=str, default="", help='path to pretrained model or model to deploy')
         self.parser.add_argument('--pretrain', action='store_true', help='default false. If true, load pretrained model to initizaize model state_dict')
         ## for train
-        self.parser.add_argument('--validate_ratio', type=float, default=0.1, help='ratio of validate set when validate model')
+
         self.parser.add_argument('--numctg', type=int, default=50, help='Number of cloth categories')
         self.parser.add_argument('--numattri', type=int, default=1000, help='Number of attribute')
         self.parser.add_argument('--epochs', type=int, default=100, help='number of epochs for training')
@@ -54,21 +41,13 @@ class Options():
         ## for test
         self.parser.add_argument('--top_k', type=str, default='(3,5)', help='tuple. We only take top k classification results into accuracy consideration')
         self.parser.add_argument('--score_thres', type=str, default='0.1', help='float or list. We only take classification results whose score is bigger than score_thres into recall consideration')
+
+        
         # these tow param below used only in deploy.py
         self.parser.add_argument('--label_file', type=str, default="", help='label file only for deploy a checkpoint model')
         self.parser.add_argument('--classify_dir', type=str, default="", help='directory where data.txt to be classified exists')
         
-        ## for visualization
-        self.parser.add_argument('--display_winsize', type=int, default=224, help='display window size')
-        self.parser.add_argument('--display_id', type=int, default=0, help='window id of the web display. Less than 1 will display nothing')
-        self.parser.add_argument('--display_port', type=int, default=8900, help='port of visdom server for web display. Result will show on `localhost:$display_port`')
-        self.parser.add_argument('--image_ncols', type=int, default=0, help='if positive, display all images in a single visdom web panel with certain number of images per row.')
-        self.parser.add_argument('--html', action='store_false', help='defalt true. Do not save intermediate training results to [opt.dir]/[opt.name]/web/')
-        self.parser.add_argument('--update_html_freq', type=int, default=10, help='frequency of saving training results to html')
-        
-        self.parser.add_argument('--display_train_freq', type=int, default=1, help='print train loss and accuracy every $train_freq epochs')
-
-        
+    
         self.parser.add_argument('--display_validate_freq', type=int, default=1, help='test validate dateset every $validate_freq batches iteration')
         self.parser.add_argument('--display_data_freq', type=int, default=1, help='frequency of showing training data on web browser')
         self.parser.add_argument('--display_image_ratio', type=float, default=2.0, help='ratio of images in a batch showing on web browser')
@@ -96,9 +75,6 @@ class Options():
 
 
         opt.top_k = eval(opt.top_k)
-        opt.mean = eval(opt.mean)
-        opt.std = eval(opt.std)
-        opt.ratio = eval(opt.ratio)
         if opt.loss_weight == "":
             opt.loss_weight=None
         else:
