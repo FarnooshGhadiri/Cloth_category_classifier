@@ -20,47 +20,32 @@ from random import sample
 from tqdm import tqdm
 import pickle
 
-def forward_batch(model, criterion_softmax, criterion_binary, inputs, target_softmax,target_binary, opt, phase):
+def forward_batch(model, criterion_softmax, criterion_binary, inputs, target_softmax, target_binary, opt, phase):
     if opt.cuda:
         inputs = inputs.cuda(opt.devices[0])
+        target_binary = target_binary.cuda(opt.devices[0])
+        target_softmax = target_softmax.cuda(opt.devices[0])
 
     if phase in ["train"]:
-        inputs_var = inputs
-        # logging.info("Switch to Train Mode")
         model.train()
     elif phase in ["valid", "test"]:
-        with torch.no_grad():
-          inputs_var = inputs
-          # logging.info("Switch to Test Mode")
-          model.eval()
+        model.eval()
 
     # forward
-    if opt.cuda:
-        if len(opt.devices) > 1:
-            output_softmax,output_binary = nn.parallel.data_parallel(model, inputs_var, opt.devices)
-        else:
-            if phase in ["train"]:
-                output_softmax, output_binary = model(inputs_var)
-            elif phase in ["valid", "test"]:
-                with torch.no_grad():
-                  output_softmax, output_binary = model(inputs_var)
-    else:
-        output_softmax, output_binary = model(inputs_var)
-        inputs = torch.cat((inputs,inputs), dim=0)
-        #print(inputs_var.shape, output_softmax.min(),output_binary.min())
+    #if len(opt.devices) > 1:
+    #    output_softmax, output_binary = nn.parallel.data_parallel(model, inputs_var, opt.devices)
+    #else:
+    if phase in ["train"]:
+        output_softmax, output_binary = model(inputs)
+    elif phase in ["valid", "test"]:
+        with torch.no_grad():
+            output_softmax, output_binary = model(inputs)
 
     # Calculate loss for sigmoid
-    if opt.cuda:
-        target_binary = target_binary.cuda(opt.devices[0])
     bin_loss = criterion_binary(output_binary, target_binary)
-
-    # calculate loss for softmax
-
-    if opt.cuda:
-         target_softmax = target_softmax.cuda(opt.devices[0])
-
     cls_loss = criterion_softmax(output_softmax, target_softmax)
-    #print(output_binary.min())
+    
+
     return output_binary, output_softmax, bin_loss, cls_loss
 
 
@@ -208,7 +193,7 @@ def train(model, criterion_softmax, criterion_binary, train_loader, val_loader, 
                 loss.backward()
                 optimizer.step()
 
-                acc_outputs = calc_accuracy(output_binary,
+                acc_outputs = calc_accuracy(torch.sigmoid(output_binary),
                                             output_softmax,
                                             target_softmax, target_binary,
                                             opt.score_thres,
@@ -222,13 +207,11 @@ def train(model, criterion_softmax, criterion_binary, train_loader, val_loader, 
                 for key in acc_outputs:
                     pbar_dict["%s_%s" % (loader_name, key)] = acc_outputs[key]
                 pbar.set_postfix(pbar_dict)
-                print(loader_name)
 
                 for key in pbar_dict:
                     if key not in total_dict:
                         total_dict[key] = []
                     total_dict[key].append(pbar_dict[key])
-                break
 
         pbar.close()
 
@@ -343,6 +326,7 @@ def main():
     '''
 
     filenames, attrs = get_list_attr_img(opt.data_dir)
+    attrs = torch.stack(attrs, 0)
     categories = get_list_category_img(opt.data_dir)
     
     indices = list(range(len(filenames)))
@@ -394,7 +378,7 @@ def main():
     opt.class_num = len(num_classes)
 
     # load model
-    model = Fashion_model(opt, num_classes)
+    model = Fashion_model(num_classes)
     logging.info(model)
 
     # imagenet pretrain model
@@ -418,7 +402,12 @@ def main():
    # print(len(Weight_attribute))
     # define loss function
     criterion_softmax = nn.CrossEntropyLoss() #weight=opt.loss_weight
-    criterion_binary = torch.nn.BCELoss()
+    if opt.pos_weights:
+        logging.info("Using pos_weights...")
+        pos_weights = (1-attrs).sum(dim=0) / attrs.sum(dim=0)
+        criterion_binary = torch.nn.BCEWithLogitsLoss(pos_weight=pos_weights)
+    else:
+        criterion_binary = torch.nn.BCEWithLogitsLoss()
 
     # use cuda
     if opt.cuda:
