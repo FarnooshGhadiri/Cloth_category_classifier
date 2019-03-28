@@ -14,7 +14,7 @@ BAD_FILENAMES = [
 # files do align, so we don't need to worry about
 # this.
 
-def get_list_attr_img(root):
+def get_list_attr_img(root, max_lines=-1):
     filename = "%s/Anno/list_attr_img.txt" % root
     f = open(filename)
     # Skip the first two lines.
@@ -23,7 +23,7 @@ def get_list_attr_img(root):
     # Process line-by-line.
     filenames = []
     attrs = []
-    for line in f:
+    for i, line in enumerate(f):
         line = line.rstrip().split()
         filename = line[0].replace("img/", "")
         if filename in BAD_FILENAMES:
@@ -32,10 +32,12 @@ def get_list_attr_img(root):
         attr = torch.FloatTensor([float(x) for x in attr])
         filenames.append(filename)
         attrs.append(attr)
+        if i == max_lines:
+            break
     f.close()
     return filenames, attrs
 
-def get_list_category_img(root):
+def get_list_category_img(root, max_lines=-1):
     filename = "%s/Anno/list_category_img.txt" % root
     f = open(filename)
     # Skip the first two lines.
@@ -43,16 +45,54 @@ def get_list_category_img(root):
     f.readline()
     categories = []
     # Process line-by-line.
-    for line in f:
+    for i, line in enumerate(f):
         line = line.rstrip().split()
         filename = line[0].replace("img/", "")
         if filename in BAD_FILENAMES:
             continue
         category = int(line[-1])
         categories.append(category)
+        if i == max_lines:
+            break
     f.close()
     return categories
 
+def get_attr_names_and_types(root, max_lines=-1):
+    filename = "%s/Anno/list_attr_cloth.txt" % root
+    f = open(filename)
+    num_files = int(f.readline())
+    f.readline()
+    attrs_name = []
+    attrs_type = []
+    for i, line in enumerate(f):
+        word = line.strip()[:-1].strip()
+        word2 = line.strip()[-1]
+        attrs_name.append(word)
+        attrs_type.append(int(word2))
+        if i == max_lines:
+            break
+    f.close()
+    return attrs_name, attrs_type
+
+def get_weight_attr_img(root):
+     filename = "%s/Anno/list_attr_img.txt" % root
+     f = open(filename)
+     # Skip the first two lines.
+     num_files = int(f.readline())
+     f.readline()
+     # Process line-by-line.
+     i = 0
+     sum_attr = torch.zeros(1000)
+     for line in f:
+        line = line.rstrip().split()
+        filename = line[0].replace("img/", "")
+        attr = [elem.replace("-1", "0") for elem in line[1::]]
+        attr = torch.FloatTensor([float(x) for x in attr])
+        sum_attr += attr
+        i = i+1
+     f.close()
+     weight_attr = 1-(sum_attr/(sum_attr.sum()))
+     return weight_attr
 
 class DeepFashionDataset(Dataset):
     def __init__(self,
