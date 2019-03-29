@@ -38,7 +38,10 @@ def forward_batch(model, criterion_softmax, criterion_binary, inputs, target_sof
     #    output_softmax, output_binary = nn.parallel.data_parallel(model, inputs_var, opt.devices)
     #else:
     if phase in ["train"]:
-        output_softmax, output_binary = model(inputs)
+        if len(opt.devices) > 1:
+            output_softmax, output_binary = nn.parallel.data_parallel(model, inputs, opt.devices)
+        else:
+            output_softmax, output_binary = model(inputs)
     elif phase in ["valid", "test"]:
         with torch.no_grad():
             output_softmax, output_binary = model(inputs)
@@ -234,11 +237,9 @@ def train(model, optimizer, criterion_softmax, criterion_binary, train_loader, v
 
         #if epoch % opt.save_epoch_freq == 0:
         #    logging.info('saving the model at the end of epoch %d, iters %d' % (epoch + 1, total_batch_iter))
-        save_model(model, opt, epoch + 1)
+        if (epoch+1) % opt.save_every == 0:
+            save_model(model, optimizer, opt.model_dir, epoch + 1)
 
-            # adjust learning rate
-        #lr = optimizer.param_groups[0]['lr']
-        #logging.info('learning rate = %.7f epoch = %d' % (lr, epoch))
     logging.info("--------Optimization Done--------")
 
 
