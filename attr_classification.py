@@ -157,7 +157,7 @@ def calc_accuracy(output_binary, output_softmax, target_softmax, target_binary, 
         return cls_acc_dict
 
 
-def train(model, optimizer, criterion_softmax, criterion_binary, train_loader, val_loader, opt, last_epoch=0):
+def train(model, optimizer, criterion_softmax, criterion_binary, train_loader, val_loader, opt, epoch=0):
 
     # record forward and backward times
     logging.info("####################Train Model###################")
@@ -169,6 +169,8 @@ def train(model, optimizer, criterion_softmax, criterion_binary, train_loader, v
     else:
         write_mode = 'a'
     f_csv = open("%s/results.txt" % opt.model_dir, write_mode)
+
+    last_epoch = epoch
     
     for epoch in range(last_epoch, opt.epochs):
         start_time = time.time()
@@ -385,9 +387,6 @@ def main():
 
     optimizer = optim.Adam(model.parameters(), lr=opt.lr)
     
-    # imagenet pretrain model
-    if opt.pretrain:
-        logging.info("use pretrained model")
     # load exsiting model
     last_epoch = 0
     if opt.resume is not None:
