@@ -401,7 +401,7 @@ def main():
                 # Get creation time and use that.
                 latest_chkpt = max(files, key=os.path.getctime)
                 logging.info("Auto-resume mode found latest checkpoint: %s" % latest_chkpt)
-                last_epoch = load_model(model, latest_chkpt)
+                last_epoch = load_model(model, optimizer, latest_chkpt)
         else:
             logging.info("Loading checkpoint: %s" % opt.resume)
             last_epoch = load_model(model, optimizer, opt.resume)

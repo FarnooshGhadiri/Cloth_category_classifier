@@ -22,7 +22,7 @@ class Options():
         self.parser.add_argument('--resume', type=str, default=None, help='Path to checkpoint. If set to `auto`, it will try find the most recent .pth in the model directory.')
 
         self.parser.add_argument('--num_ctg', type=int, default=50, help='Number of cloth categories')
-        self.parser.add_argument('--numattr', type=int, default=1000, help='Number of attribute')
+        self.parser.add_argument('--num_attr', type=int, default=1000, help='Number of attribute')
         
         self.parser.add_argument('--epochs', type=int, default=100, help='number of epochs for training')
         self.parser.add_argument('--lr', type=float, default=1e-4, help='initial learning rate')
@@ -65,10 +65,6 @@ class Options():
 
 
         opt.top_k = eval(opt.top_k)
-        if opt.loss_weight == "":
-            opt.loss_weight=None
-        else:
-            opt.loss_weight = torch.FloatTensor(eval(opt.loss_weight))
 
         return opt
 
