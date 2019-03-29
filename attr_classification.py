@@ -11,7 +11,9 @@ from data.dataset_fashion import (DeepFashionDataset,
                                   get_list_attr_img,
                                   get_list_category_img,
                                   get_weight_attr_img)
-from models.model import Fashion_model, save_model
+from models.model import (Fashion_model,
+                          save_model,
+                          load_model)
 from options.options import Options
 from torch.utils.data import DataLoader
 from util import util
@@ -155,9 +157,7 @@ def calc_accuracy(output_binary, output_softmax, target_softmax, target_binary, 
         return cls_acc_dict
 
 
-def train(model, criterion_softmax, criterion_binary, train_loader, val_loader, opt):
-
-    optimizer = optim.Adam(model.parameters(),lr=opt.lr)
+def train(model, optimizer, criterion_softmax, criterion_binary, train_loader, val_loader, opt, last_epoch=0):
 
     # record forward and backward times
     logging.info("####################Train Model###################")
@@ -170,7 +170,7 @@ def train(model, criterion_softmax, criterion_binary, train_loader, val_loader, 
         write_mode = 'a'
     f_csv = open("%s/results.txt" % opt.model_dir, write_mode)
     
-    for epoch in range(opt.epochs):
+    for epoch in range(last_epoch, opt.epochs):
         start_time = time.time()
         
         total_dict = {} # record per-minibatch metrics
@@ -180,7 +180,8 @@ def train(model, criterion_softmax, criterion_binary, train_loader, val_loader, 
             
             pbar = tqdm(total=len(loader))
             for i, data in enumerate(loader):
-                optimizer.zero_grad()
+                if loader_name == 'train':
+                    optimizer.zero_grad()
                 inputs, target_softmax, target_binary = data
                 output_binary, output_softmax, bin_loss, cls_loss = forward_batch(
                     model,
@@ -190,8 +191,9 @@ def train(model, criterion_softmax, criterion_binary, train_loader, val_loader, 
                     opt,
                     loader_name)
                 loss = bin_loss + cls_loss
-                loss.backward()
-                optimizer.step()
+                if loader_name == 'train':
+                    loss.backward()
+                    optimizer.step()
 
                 acc_outputs = calc_accuracy(torch.sigmoid(output_binary),
                                             output_softmax,
@@ -374,29 +376,35 @@ def main():
     '''
     
 
-    num_classes = [opt.numctg, opt.numattri] #temporary lets put the number of class []
-    opt.class_num = len(num_classes)
+    num_categories = opt.num_ctg
+    num_attrs = opt.num_attr
 
     # load model
-    model = Fashion_model(num_classes)
+    model = Fashion_model(num_categories, num_attrs, opt.resnet_type)
     logging.info(model)
 
+    optimizer = optim.Adam(model.parameters(), lr=opt.lr)
+    
     # imagenet pretrain model
     if opt.pretrain:
         logging.info("use pretrained model")
     # load exsiting model
-    if opt.checkpoint_name != "":
-        if os.path.exists(opt.checkpoint_name):
-            logging.info("load pretrained model from " + opt.checkpoint_name)
-            model.load_state_dict(torch.load(opt.checkpoint_name))
-        elif os.path.exists(opt.model_dir):
-            checkpoint_name = opt.model_dir + "/" + opt.checkpoint_name
-            model.load_state_dict(torch.load(checkpoint_name))
-            logging.info("load pretrained model from " + checkpoint_name)
+    last_epoch = 0
+    if opt.resume is not None:
+        if opt.resume == 'auto':
+            import glob
+            # List all the pkl files.
+            files = glob.glob("%s/*.pth" % opt.model_dir)
+            # Make them absolute paths.
+            files = [os.path.abspath(key) for key in files]
+            if len(files) > 0:
+                # Get creation time and use that.
+                latest_chkpt = max(files, key=os.path.getctime)
+                logging.info("Auto-resume mode found latest checkpoint: %s" % latest_chkpt)
+                last_epoch = load_model(model, latest_chkpt)
         else:
-            opt.checkpoint_name = ""
-            logging.warning("WARNING: unknown pretrained model, skip it.")
-
+            logging.info("Loading checkpoint: %s" % opt.resume)
+            last_epoch = load_model(model, optimizer, opt.resume)
 
     #Weight_attribute = get_weight_attr_img(opt)
    # print(len(Weight_attribute))
@@ -417,7 +425,7 @@ def main():
 
     # Train model
     if opt.mode == "Train":
-        train(model, criterion_softmax, criterion_binary, loader_train, loader_valid, opt)
+        train(model, optimizer, criterion_softmax, criterion_binary, loader_train, loader_valid, opt, epoch=last_epoch)
     # Test model
     elif opt.mode == "Test":
         test(model, criterion_softmax, criterion_binary, loader_valid, opt)
