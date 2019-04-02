@@ -10,10 +10,9 @@ import torch.optim as optim
 from data.dataset_fashion import (DeepFashionDataset,
                                   get_list_attr_img,
                                   get_list_category_img,
-                                  get_weight_attr_img)
-from models.model import (FashionResnet,
-                          FashionResnetLG,
-                          FashionResnet2L)
+                                  get_weight_attr_img,
+                                  get_bboxes)
+from models.model import FashionResnet
 from options.options import Options
 from torch.utils.data import DataLoader
 from util import util
@@ -22,12 +21,13 @@ from random import sample
 from tqdm import tqdm
 import pickle
 
-def forward_batch(model, criterion_softmax, criterion_binary, inputs, target_softmax, target_binary, opt, phase):
+def forward_batch(model, criterion_softmax, criterion_binary, inputs, target_softmax, target_binary, target_bbox, opt, phase):
     if opt.cuda:
         inputs = inputs.cuda(opt.devices[0])
         target_binary = target_binary.cuda(opt.devices[0])
         target_softmax = target_softmax.cuda(opt.devices[0])
-
+        target_bbox = target_bbox.cuda(opt.devices[0])
+        
     if phase in ["train"]:
         model.train()
     elif phase in ["valid", "test"]:
@@ -39,22 +39,27 @@ def forward_batch(model, criterion_softmax, criterion_binary, inputs, target_sof
     #else:
     if phase in ["train"]:
         if len(opt.devices) > 1:
-            output_softmax, output_binary = nn.parallel.data_parallel(model, inputs, opt.devices)
+            output_softmax, output_binary, output_bbox = nn.parallel.data_parallel(model, inputs, opt.devices)
         else:
-            output_softmax, output_binary = model(inputs)
+            output_softmax, output_binary, output_bbox = model(inputs)
     elif phase in ["valid", "test"]:
         with torch.no_grad():
-            output_softmax, output_binary = model(inputs)
+            output_softmax, output_binary, output_bbox = model(inputs)
 
-    # Calculate loss for sigmoid
+    # Calculate loss for attributes.
     bin_loss = criterion_binary(output_binary, target_binary)
     if opt.reduce_sum:
         bin_loss = bin_loss.sum(dim=1).mean()
     else:
         bin_loss = bin_loss.mean()
+    # Calculate loss for classification.
     cls_loss = criterion_softmax(output_softmax, target_softmax)
+    # Calculate loss for bounding boxes.
+    import pdb
+    pdb.set_trace()
+    bbox_loss = torch.mean(torch.abs(output_bbox-target_bbox))
 
-    return output_binary, output_softmax, bin_loss, cls_loss
+    return output_binary, output_softmax, output_bbox, bin_loss, cls_loss, bbox_loss
 
 
 
@@ -215,15 +220,15 @@ def train(model, optimizer, criterion_softmax, criterion_binary, train_loader, v
             for i, data in enumerate(loader):
                 if loader_name == 'train':
                     optimizer.zero_grad()
-                inputs, target_softmax, target_binary = data
-                output_binary, output_softmax, bin_loss, cls_loss = forward_batch(
+                inputs, target_softmax, target_binary, target_bbox = data
+                output_binary, output_softmax, output_bbox, bin_loss, cls_loss, bbox_loss = forward_batch(
                     model,
                     criterion_softmax, criterion_binary,
                     inputs,
-                    target_softmax, target_binary,
+                    target_softmax, target_binary, target_bbox,
                     opt,
                     loader_name)
-                loss = bin_loss + cls_loss
+                loss = bin_loss + cls_loss + bbox_loss
                 
                 if loader_name == 'train':
                     loss.backward()
@@ -239,7 +244,8 @@ def train(model, optimizer, criterion_softmax, criterion_binary, train_loader, v
                 pbar.update(1)
                 pbar_dict = {'epoch': epoch+1,
                              '%s_bin_loss' % loader_name: bin_loss.item(),
-                             '%s_cls_loss' % loader_name: cls_loss.item()}
+                             '%s_cls_loss' % loader_name: cls_loss.item(),
+                             '%s_bbox_loss' % loader_name: bbox_loss.item()}
                 for key in acc_outputs:
                     pbar_dict["%s_%s" % (loader_name, key)] = acc_outputs[key]
                 pbar.set_postfix(pbar_dict)
@@ -369,6 +375,8 @@ def main():
     filenames, attrs = get_list_attr_img(opt.data_dir)
     attrs = torch.stack(attrs, 0)
     categories = get_list_category_img(opt.data_dir)
+    bboxes = get_bboxes(opt.data_dir)
+
     
     indices = list(range(len(filenames)))
     rnd_state = np.random.RandomState(0)
@@ -383,6 +391,7 @@ def main():
                                   indices=train_idx,
                                   attrs=attrs,
                                   categories=categories,
+                                  bboxes=bboxes,
                                   img_size=opt.img_size,
                                   crop_size=opt.crop_size)
     ds_valid = DeepFashionDataset(root=opt.data_dir,
@@ -390,6 +399,7 @@ def main():
                                   indices=valid_idx,
                                   attrs=attrs,
                                   categories=categories,
+                                  bboxes=bboxes,
                                   img_size=opt.img_size,
                                   crop_size=opt.crop_size)
     '''
@@ -422,8 +432,8 @@ def main():
     if not opt.local_features:
         resnet_class = FashionResnet
     else:
-        resnet_class = FashionResnet2L
-    model = resnet_class(num_categories, num_attrs, opt.resnet_type, opt.use_pretrain)
+        resnet_class = None
+    model = resnet_class(num_categories, num_attrs, opt.resnet_type)
     logging.info(model)
 
     if opt.optimizer == 'adam':

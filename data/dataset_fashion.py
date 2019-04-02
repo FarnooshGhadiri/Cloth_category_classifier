@@ -94,6 +94,19 @@ def get_weight_attr_img(root):
      weight_attr = 1-(sum_attr/(sum_attr.sum()))
      return weight_attr
 
+def get_bboxes(root):
+    buf = []
+    with open("%s/Anno/list_bbox.txt" % root) as f:
+        for line in f:
+            line = line.rstrip().split()
+            # in the form [x1, y1, x2, y2]
+            bbox = [ int(x) for x in line[1:] ]
+            #bbox[2] = bbox[2] - bbox[0]
+            #bbox[3] = bbox[3] - bbox[1]
+            bbox = torch.FloatTensor(bbox)
+            buf.append(bbox)
+    return buf
+ 
 class DeepFashionDataset(Dataset):
     def __init__(self,
                  root,
@@ -101,6 +114,7 @@ class DeepFashionDataset(Dataset):
                  indices,
                  attrs,
                  categories,
+                 bboxes,
                  img_size=256,
                  crop_size=224,
                  mean=0.5,
@@ -121,6 +135,7 @@ class DeepFashionDataset(Dataset):
         self.filenames = filenames
         self.attrs = attrs
         self.categories = categories
+        self.bboxes = bboxes
         self.transformer = get_transformer(img_size=img_size,
                                            crop_size=crop_size,
                                            mean=mean,
@@ -128,13 +143,21 @@ class DeepFashionDataset(Dataset):
 
     def __getitem__(self, index):
         this_idx = self.indices[index]
-        filepath = "%s/DF_Img/img/%s" % (self.root, self.filenames[this_idx])
+        filepath = "%s/DF_Img_Low/img/%s" % (self.root, self.filenames[this_idx])
         img = Image.open(filepath)
+        ww, hh = img.width, img.height
         img = img.convert("RGB")
         img = self.transformer(img)
         attr_label = self.attrs[this_idx]
         category_label = self.categories[this_idx]
-        return img, category_label, attr_label
+        # Get the bbox label and normalise it based on
+        # the height and width of the image.
+        bbox_label = self.bboxes[this_idx].clone()
+        bbox_label[0] /= ww
+        bbox_label[2] /= ww
+        bbox_label[1] /= hh
+        bbox_label[3] /= hh
+        return img, category_label, attr_label, bbox_label
 
     def __len__(self):
         return len(self.indices)
