@@ -11,9 +11,9 @@ from data.dataset_fashion import (DeepFashionDataset,
                                   get_list_attr_img,
                                   get_list_category_img,
                                   get_weight_attr_img)
-from models.model import (Fashion_model,
-                          save_model,
-                          load_model)
+from models.model import (FashionResnet,
+                          FashionResnetLG,
+                          FashionResnet2L)
 from options.options import Options
 from torch.utils.data import DataLoader
 from util import util
@@ -48,8 +48,11 @@ def forward_batch(model, criterion_softmax, criterion_binary, inputs, target_sof
 
     # Calculate loss for sigmoid
     bin_loss = criterion_binary(output_binary, target_binary)
+    if opt.reduce_sum:
+        bin_loss = bin_loss.sum(dim=1).mean()
+    else:
+        bin_loss = bin_loss.mean()
     cls_loss = criterion_softmax(output_softmax, target_softmax)
-    
 
     return output_binary, output_softmax, bin_loss, cls_loss
 
@@ -96,12 +99,37 @@ def forward_dataset(model, criterion_softmax, criterion_binary, data_loader, opt
     avg_loss = map(lambda x: x/(sum_batch), avg_loss)
     return avg_accuracy, avg_acc_per_type,avg_acc_per_attr, avg_loss
 
+def save_model(model, optimizer, model_dir, epoch):
+    """Save model
 
+    :param model: model state to save 
+    :param optimizer: optim state to save
+    :param model_dir: 
+    :param epoch: epoch # to save
+    :returns: 
+    :rtype: 
 
+    """
+    checkpoint_name = "%s/epoch_%s.pth" % (model_dir, epoch)
+    dd = {'model': model.state_dict(),
+          'optim': optimizer.state_dict(),
+          'epoch': epoch}
+    torch.save(dd, checkpoint_name)
+    #torch.save(model.cpu().state_dict(), checkpoint_name)
+    #if opt.cuda and torch.cuda.is_available():
+    #    model.cuda(opt.devices[0])
 
-
-
-
+def load_model(model, optimizer, checkpoint, devices=[]):
+    dd = torch.load(checkpoint)
+    model.load_state_dict(dd['model'])
+    if 'optim' in dd:
+        optimizer.load_state_dict(dd['optim'])
+        for p in optimizer.state.keys():
+            param_state = optimizer.state[p]
+            for key in param_state:
+                if hasattr(param_state[key], 'cuda'):
+                    param_state[key] = param_state[key].cuda(devices[0])
+    return dd['epoch']
 
 def indices_to_binary(indices, length):
     tmp = torch.zeros(length).float()
@@ -196,11 +224,12 @@ def train(model, optimizer, criterion_softmax, criterion_binary, train_loader, v
                     opt,
                     loader_name)
                 loss = bin_loss + cls_loss
+                
                 if loader_name == 'train':
                     loss.backward()
                     optimizer.step()
 
-                acc_outputs = calc_accuracy(torch.sigmoid(output_binary),
+                acc_outputs = calc_accuracy(output_binary,
                                             output_softmax,
                                             target_softmax, target_binary,
                                             opt.score_thres,
@@ -265,6 +294,13 @@ def test(model, criterion_softmax, criterion_binary, test_set, opt):
     logging.info("#################Finished Testing################")
 
 
+class HingeLoss(nn.Module):
+    def __init__(self):
+        super(HingeLoss, self).__init__()
+    def forward(self, output, target):
+        target_ctr = (target - 0.5) / 0.5
+        return nn.ReLU()(1. - target_ctr*output)
+    
 def main():
 
 
@@ -370,7 +406,7 @@ def main():
     loader_valid = DataLoader(ds_valid,
                               shuffle=False,
                               batch_size=opt.batch_size,
-                              num_workers=1)
+                              num_workers=opt.num_workers)
     '''
     loader_test = DataLoader(ds_train,
                              shuffle=False,
@@ -383,10 +419,17 @@ def main():
     num_attrs = opt.num_attr
 
     # load model
-    model = Fashion_model(num_categories, num_attrs, opt.resnet_type)
+    if not opt.local_features:
+        resnet_class = FashionResnet
+    else:
+        resnet_class = FashionResnet2L
+    model = resnet_class(num_categories, num_attrs, opt.resnet_type, opt.use_pretrain)
     logging.info(model)
 
-    optimizer = optim.Adam(model.parameters(), lr=opt.lr)
+    if opt.optimizer == 'adam':
+        optimizer = optim.Adam(model.parameters(), lr=opt.lr)
+    else:
+        optimizer = optim.SGD(model.parameters(), lr=opt.lr, momentum=0.9)
     
     # load exsiting model
     last_epoch = 0
@@ -401,21 +444,30 @@ def main():
                 # Get creation time and use that.
                 latest_chkpt = max(files, key=os.path.getctime)
                 logging.info("Auto-resume mode found latest checkpoint: %s" % latest_chkpt)
-                last_epoch = load_model(model, optimizer, latest_chkpt)
+                last_epoch = load_model(model, optimizer, latest_chkpt, devices=opt.devices)
         else:
             logging.info("Loading checkpoint: %s" % opt.resume)
-            last_epoch = load_model(model, optimizer, opt.resume)
+            last_epoch = load_model(model, optimizer, opt.resume, devices=opt.devices)
 
     #Weight_attribute = get_weight_attr_img(opt)
    # print(len(Weight_attribute))
     # define loss function
     criterion_softmax = nn.CrossEntropyLoss() #weight=opt.loss_weight
-    if opt.pos_weights:
-        logging.info("Using pos_weights...")
-        pos_weights = (1-attrs).sum(dim=0) / attrs.sum(dim=0)
-        criterion_binary = torch.nn.BCEWithLogitsLoss(pos_weight=pos_weights)
+    if opt.loss == 'bce':
+        if opt.pos_weights:
+            logging.info("Using pos_weights...")
+            pos_weights = (1-attrs).sum(dim=0) / attrs.sum(dim=0)
+            # Scale pos_weights such that its maximum value will be == pos_weights_scale.
+            # This is in case pos_weights has too big of a range.
+            pos_weights = pos_weights / ( pos_weights.max() / opt.pos_weights_scale )
+            criterion_binary = torch.nn.BCEWithLogitsLoss(pos_weight=pos_weights,
+                                                          reduction='none')
+        else:
+            criterion_binary = torch.nn.BCEWithLogitsLoss(reduction='none')
     else:
-        criterion_binary = torch.nn.BCEWithLogitsLoss()
+        if opt.pos_weights:
+            raise Exception("`pos_weights` only works with BCE loss!")
+        criterion_binary = HingeLoss()
 
     # use cuda
     if opt.cuda:
@@ -423,9 +475,19 @@ def main():
         criterion_softmax = criterion_softmax.cuda(opt.devices[0])
         criterion_binary = criterion_binary.cuda(opt.devices[0])
 
+    #def train(model, optimizer, criterion_softmax, criterion_binary, train_loader, val_loader, opt, epoch=0):
+
+        
     # Train model
     if opt.mode == "Train":
-        train(model, optimizer, criterion_softmax, criterion_binary, loader_train, loader_valid, opt, epoch=last_epoch)
+        train(model=model,
+              optimizer=optimizer,
+              criterion_softmax=criterion_softmax,
+              criterion_binary=criterion_binary,
+              train_loader=loader_train,
+              val_loader=loader_valid,
+              opt=opt,
+              epoch=last_epoch)
     # Test model
     elif opt.mode == "Test":
         test(model, criterion_softmax, criterion_binary, loader_valid, opt)

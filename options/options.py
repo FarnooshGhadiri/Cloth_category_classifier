@@ -16,8 +16,15 @@ class Options():
         self.parser.add_argument('--batch_size', type=int, default=64, help='batch size of network input. Note that batch_size should only set to 1 in Test mode')
         self.parser.add_argument('--num_workers', type=int, default=4, help='how many subprocesses to use for data loading')
         self.parser.add_argument('--gpu_ids', type=str, default='0', help='gpu ids: e.g. 0  0,1,2, 0,2. use -1 for CPU')
+        self.parser.add_argument('--loss', type=str, default='bce,', choices=['bce', 'hinge'], help='Loss function')
+        self.parser.add_argument('--use_pretrain', action='store_true', help='If set, initialise resnet with pre-trained ImageNet weights')
+        self.parser.add_argument('--local_features', action='store_true', help='')
+        
+        self.parser.add_argument('--reduce_sum', action='store_true', help='If true, BCE loss is sum then mean')
         self.parser.add_argument('--pos_weights', action='store_true', help='If true, use pos_weights with BCELossWithLogits')
-        self.parser.add_argument('--save_every', default=1, help='Save a checkpoint every this many epochs')
+        self.parser.add_argument('--pos_weights_scale', type=float, default=1.0, help='weights / (max(weights) / k)') # in other words, specifiying k means the max(wts) will be == k
+        
+        self.parser.add_argument('--save_every', type=int, default=1, help='Save a checkpoint every this many epochs')
 
         self.parser.add_argument('--resume', type=str, default=None, help='Path to checkpoint. If set to `auto`, it will try find the most recent .pth in the model directory.')
 
@@ -25,6 +32,9 @@ class Options():
         self.parser.add_argument('--num_attr', type=int, default=1000, help='Number of attribute')
         
         self.parser.add_argument('--epochs', type=int, default=100, help='number of epochs for training')
+
+
+        self.parser.add_argument('--optimizer', type=str, default='adam', choices=['sgd', 'adam'])
         self.parser.add_argument('--lr', type=float, default=1e-4, help='initial learning rate')
         self.parser.add_argument('--gamma', type=float, default=0.1, help='multiplicative factor of learning rate decay.')
 
