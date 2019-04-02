@@ -9,7 +9,7 @@ import numpy as np
 
 ROI_POOL_SIZE = (3,3)
 from torch.nn import AdaptiveMaxPool2d
-def gated_roi_pooling(input, rois, gates=None, size=ROI_POOL_SIZE, spatial_scale=1.0):
+def gated_roi_pooling(input, rois, size=ROI_POOL_SIZE):
     """
     Standard roi-pooling extended to accept a mask vector (gates) wich will set all activations to zero for
     correspnding features
@@ -23,10 +23,10 @@ def gated_roi_pooling(input, rois, gates=None, size=ROI_POOL_SIZE, spatial_scale
     assert (rois.dim() == 2)
     assert (rois.size(1) == 5)
     output = []
-    rois = rois.data.float()
+    #rois = rois.data.float()
     num_rois = rois.size(0)
 
-    rois[:, 1:].mul_(spatial_scale)
+    #rois[:, 1:].mul_(spatial_scale)
     rois = rois.long()
     for i in range(num_rois):
         roi = rois[i]
@@ -36,8 +36,6 @@ def gated_roi_pooling(input, rois, gates=None, size=ROI_POOL_SIZE, spatial_scale
         output.append(mp)
 
     pooled_features = torch.cat(output, 0)
-    if gates is not None:
-        pooled_features[gates.flatten()] = 0
 
     return pooled_features.view(input.shape[0], -1, ROI_POOL_SIZE[0], ROI_POOL_SIZE[1])
 
@@ -64,10 +62,8 @@ class FashionResnet(nn.Module):
         self.reduce_1x1 = nn.Conv2d(self.output_dim, 32, kernel_size=1, stride=1)
         
         # [x1, y1, x_offset, y_offset]
-        self.fc_bbox = nn.Sequential(
-            nn.Linear(32*7*7, 4),
-            nn.Sigmoid()
-        )
+        self.fc_bbox_xy = nn.Linear(32*7*7, 2)
+        self.fc_bbox_offset = nn.Linear(32*7*7, 2)
         
         self.tot_dim = self.output_dim + (3*3*512)
     
@@ -82,23 +78,27 @@ class FashionResnet(nn.Module):
         # Ok, compute local features using ROIPooling
         # on the predicted bounding boxes.
         pre_bbox = self.reduce_1x1(base_features)
-        pre_bbox = pre_bbox.view(-1, 32*self.SPATIAL_DIM*self.SPATIAL_DIM)
-        bbox = self.fc_bbox(pre_bbox)
+        pre_bbox = pre_bbox.reshape(-1, 32*self.SPATIAL_DIM*self.SPATIAL_DIM)
+        bbox_xy = F.sigmoid(self.fc_bbox_xy(pre_bbox))
+        bbox_offset = F.sigmoid(self.fc_bbox_offset(pre_bbox))
+        bbox = torch.cat( (bbox_xy, bbox_xy+bbox_offset), dim=1 )
         # The last two values of bbox are actually offsets,
         # so we need to make these absolute coordinates.
-        bbox[:, 2] = bbox[:, 2] + bbox[:, 0]
-        bbox[:, 3] = bbox[:, 3] + bbox[:, 1]
+        #bbox[:, 2] = bbox[:, 2] + bbox[:, 0]
+        #bbox[:, 3] = bbox[:, 3] + bbox[:, 1]
     
         batch_ids = torch.arange(0, bs).view(-1, bs).t().float()
+        if x.is_cuda:
+            batch_ids = batch_ids.cuda()
         bbox_new = torch.cat((batch_ids, bbox), dim=1)
         bbox_new[:, 1:] = bbox_new[:, 1:] * self.SPATIAL_DIM
         
         local_features = gated_roi_pooling(base_features, rois=bbox_new)
-        local_features = local_features.view(-1, self.output_dim*3*3)
+        local_features = local_features.reshape(-1, self.output_dim*3*3)
         
         # Ok, compute global features 
         global_features = self.avg_pool(base_features)
-        global_features = global_features.view(-1, self.output_dim)
+        global_features = global_features.reshape(-1, self.output_dim)
         
         all_features = torch.cat((global_features, local_features), dim=1)
         
