@@ -1,10 +1,13 @@
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+from matplotlib import patches
 import os
 import sys
 import time
 import logging
 import numpy as np
 import torch
-from operator import add
 import torch.nn as nn
 import torch.optim as optim
 from data.dataset_fashion import (DeepFashionDataset,
@@ -17,7 +20,6 @@ from options.options import Options
 from torch.utils.data import DataLoader
 from util import util
 from data.input import get_attr_name, get_Ctg_name
-from random import sample
 from tqdm import tqdm
 import pickle
 
@@ -55,8 +57,6 @@ def forward_batch(model, criterion_softmax, criterion_binary, inputs, target_sof
     # Calculate loss for classification.
     cls_loss = criterion_softmax(output_softmax, target_softmax)
     # Calculate loss for bounding boxes.
-    import pdb
-    pdb.set_trace()
     bbox_loss = torch.mean(torch.abs(output_bbox-target_bbox))
 
     return output_binary, output_softmax, output_bbox, bin_loss, cls_loss, bbox_loss
@@ -193,6 +193,32 @@ def calc_accuracy(output_binary, output_softmax, target_softmax, target_binary, 
         return cls_acc_dict
 
 
+def bbox_on_image(img_batch, gt_bbox_batch, pred_bbox_batch, out_file):
+    n_images = img_batch.size(0)
+    fig, axes = plt.subplots(n_images)
+    img_batch = img_batch.numpy()*0.5 + 0.5
+    sz = img_batch.shape[3]
+    for i in range(n_images):
+        axes[i].imshow(img_batch[i].swapaxes(0,1).swapaxes(1,2))
+        # (x1, y1, x2, y2)
+        this_gt_bbox = gt_bbox_batch[i]*sz
+        x1, y1, x2, y2 = this_gt_bbox
+        rect = patches.Rectangle((x1, y1), x2-x1, y2-y1,
+                                 linewidth=1,
+                                 edgecolor='b',
+                                 facecolor='none')
+        axes[i].add_patch(rect)
+        this_pred_bbox = pred_bbox_batch[i]*sz
+        x1, y1, x2, y2 = this_pred_bbox
+        rect = patches.Rectangle((x1, y1), x2-x1, y2-y1,
+                                 linewidth=1,
+                                 edgecolor='r',
+                                 facecolor='none')
+        axes[i].add_patch(rect)
+    plt.savefig(out_file)
+    plt.close(fig)
+
+    
 def train(model, optimizer, criterion_softmax, criterion_binary, train_loader, val_loader, opt, epoch=0):
 
     # record forward and backward times
@@ -220,7 +246,7 @@ def train(model, optimizer, criterion_softmax, criterion_binary, train_loader, v
             for i, data in enumerate(loader):
                 if loader_name == 'train':
                     optimizer.zero_grad()
-                inputs, target_softmax, target_binary, target_bbox = data
+                filepaths, ww, hh, inputs, target_softmax, target_binary, target_bbox = data
                 output_binary, output_softmax, output_bbox, bin_loss, cls_loss, bbox_loss = forward_batch(
                     model,
                     criterion_softmax, criterion_binary,
@@ -254,6 +280,12 @@ def train(model, optimizer, criterion_softmax, criterion_binary, train_loader, v
                     if key not in total_dict:
                         total_dict[key] = []
                     total_dict[key].append(pbar_dict[key])
+
+                if i == 0:
+                    print(filepaths)
+                    print(target_bbox)
+                    bbox_on_image(inputs, target_bbox, output_bbox.detach(), "test.png")
+                    
 
         pbar.close()
 
@@ -372,13 +404,12 @@ def main():
             categories = dat['categories']
     '''
 
-    filenames, attrs = get_list_attr_img(opt.data_dir)
-    attrs = torch.stack(attrs, 0)
+    attrs = get_list_attr_img(opt.data_dir)
     categories = get_list_category_img(opt.data_dir)
     bboxes = get_bboxes(opt.data_dir)
 
     
-    indices = list(range(len(filenames)))
+    indices = list(range(len(attrs.keys())))
     rnd_state = np.random.RandomState(0)
     rnd_state.shuffle(indices)
     train_idx = indices[0:int(0.9*len(indices))]
@@ -387,7 +418,6 @@ def main():
 
     # Define datasets.
     ds_train = DeepFashionDataset(root=opt.data_dir,
-                                  filenames=filenames,
                                   indices=train_idx,
                                   attrs=attrs,
                                   categories=categories,
@@ -395,7 +425,6 @@ def main():
                                   img_size=opt.img_size,
                                   crop_size=opt.crop_size)
     ds_valid = DeepFashionDataset(root=opt.data_dir,
-                                  filenames=filenames,
                                   indices=valid_idx,
                                   attrs=attrs,
                                   categories=categories,

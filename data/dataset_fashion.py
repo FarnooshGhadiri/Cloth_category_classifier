@@ -21,8 +21,7 @@ def get_list_attr_img(root, max_lines=-1):
     f.readline() # num files
     f.readline() # header
     # Process line-by-line.
-    filenames = []
-    attrs = []
+    dd = dict()
     for i, line in enumerate(f):
         line = line.rstrip().split()
         filename = line[0].replace("img/", "")
@@ -30,12 +29,11 @@ def get_list_attr_img(root, max_lines=-1):
             continue
         attr = [elem.replace("-1", "0") for elem in line[1::]]
         attr = torch.FloatTensor([float(x) for x in attr])
-        filenames.append(filename)
-        attrs.append(attr)
+        dd[filename] = attr
         if i == max_lines:
             break
     f.close()
-    return filenames, attrs
+    return dd
 
 def get_list_category_img(root, max_lines=-1):
     filename = "%s/Anno/list_category_img.txt" % root
@@ -43,7 +41,7 @@ def get_list_category_img(root, max_lines=-1):
     # Skip the first two lines.
     num_files = int(f.readline())
     f.readline()
-    categories = []
+    dd = dict()
     # Process line-by-line.
     for i, line in enumerate(f):
         line = line.rstrip().split()
@@ -51,11 +49,11 @@ def get_list_category_img(root, max_lines=-1):
         if filename in BAD_FILENAMES:
             continue
         category = int(line[-1])
-        categories.append(category)
+        dd[filename] = category
         if i == max_lines:
             break
     f.close()
-    return categories
+    return dd
 
 def get_attr_names_and_types(root, max_lines=-1):
     filename = "%s/Anno/list_attr_cloth.txt" % root
@@ -95,22 +93,22 @@ def get_weight_attr_img(root):
      return weight_attr
 
 def get_bboxes(root):
-    buf = []
+    dd = {}
     with open("%s/Anno/list_bbox.txt" % root) as f:
         for line in f:
             line = line.rstrip().split()
+            filename = line[0].replace("img/", "")
             # in the form [x1, y1, x2, y2]
             bbox = [ int(x) for x in line[1:] ]
             #bbox[2] = bbox[2] - bbox[0]
             #bbox[3] = bbox[3] - bbox[1]
             bbox = torch.FloatTensor(bbox)
-            buf.append(bbox)
-    return buf
+            dd[filename] = bbox
+    return dd
  
 class DeepFashionDataset(Dataset):
     def __init__(self,
                  root,
-                 filenames,
                  indices,
                  attrs,
                  categories,
@@ -127,37 +125,39 @@ class DeepFashionDataset(Dataset):
           
         """
         super(DeepFashionDataset, self).__init__()
-        assert len(filenames) == len(attrs) == len(categories)
         # self.transform = transforms.Compose(transforms_)
         self.root = root
         self.indices = indices
         # Store information about the dataset.
-        self.filenames = filenames
+        self.filenames = list(attrs.keys())
         self.attrs = attrs
         self.categories = categories
         self.bboxes = bboxes
+        for arr in [attrs, categories, bboxes]:
+            print("length: ", len(arr))
+        
         self.transformer = get_transformer(img_size=img_size,
                                            crop_size=crop_size,
                                            mean=mean,
                                            std=std)
 
     def __getitem__(self, index):
-        this_idx = self.indices[index]
-        filepath = "%s/DF_Img_Low/img/%s" % (self.root, self.filenames[this_idx])
+        this_filename = self.filenames[index]
+        filepath = "%s/DF_Img_Low/img/%s" % (self.root, this_filename)
         img = Image.open(filepath)
         ww, hh = img.width, img.height
         img = img.convert("RGB")
         img = self.transformer(img)
-        attr_label = self.attrs[this_idx]
-        category_label = self.categories[this_idx]
+        attr_label = self.attrs[this_filename]
+        category_label = self.categories[this_filename]
         # Get the bbox label and normalise it based on
         # the height and width of the image.
-        bbox_label = self.bboxes[this_idx].clone()
+        bbox_label = self.bboxes[this_filename].clone()
         bbox_label[0] /= ww
         bbox_label[2] /= ww
         bbox_label[1] /= hh
         bbox_label[3] /= hh
-        return img, category_label, attr_label, bbox_label
+        return filepath, ww, hh, img, category_label, attr_label, bbox_label
 
     def __len__(self):
         return len(self.indices)
