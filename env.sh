@@ -9,8 +9,8 @@ env
 
 CLUSTER="mila"
 if [ $CLUSTER == "mila" ]; then
-  export TMP_DIR=/Tmp/beckhamc/deep_fashion
-  DF_IMG=/network/data1/beckhamc/deep_fashion/DF_Img.zip
+  export TMP_DIR=/tmp/beckhamc/deep_fashion
+  DF_IMG=/network/data1/beckhamc/deep_fashion/DF_Img_Low.zip
   DF_ANNO=/network/data1/beckhamc/deep_fashion/DF_Anno.zip
   export RESULTS_DIR=results_mixup
 elif [ $CLUSTER == "cc" ]; then
@@ -37,7 +37,7 @@ fi
 echo 'copying images...'
 if [ ! -d ${TMP_DIR}/DF_Img ]; then
   scp ${DF_IMG} ${TMP_DIR}
-  `cd ${TMP_DIR} && unzip -o DF_Img.zip`
+  `cd ${TMP_DIR} && unzip -o DF_Img_Low.zip`
 fi
 
 echo 'copying annotations...'
