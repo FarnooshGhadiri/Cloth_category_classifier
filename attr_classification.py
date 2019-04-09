@@ -59,7 +59,7 @@ def forward_batch(model, criterion_softmax, criterion_binary, inputs, target_sof
     return output_binary, output_softmax, output_bbox, bin_loss, cls_loss, bbox_loss
 
 def forward_dataset(model, criterion_softmax, criterion_binary, loader, opt):
-    _, attr_type = get_attr_name(opt)
+    _, attr_type = get_attr_name(opt.data_dir)
     with torch.no_grad():
         stats = OrderedDict()
         pbar = tqdm(total=len(loader))
@@ -210,7 +210,7 @@ def train(model, optimizer, criterion_softmax, criterion_binary, train_loader, v
 
     # record forward and backward times
     logging.info("####################Train Model###################")
-    _, attr_type = get_attr_name(opt)
+    _, attr_type = get_attr_name(opt.data_dir)
 
     csv_file = "%s/results.txt" % opt.model_dir
     if not os.path.exists(csv_file):

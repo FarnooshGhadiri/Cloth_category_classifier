@@ -2,8 +2,8 @@ from options.options import Options
 import torch
 
 
-def get_attr_name(opt):
-    filename = "%s/Anno/list_attr_cloth.txt" % opt.data_dir
+def get_attr_name(data_dir):
+    filename = "%s/Anno/list_attr_cloth.txt"
     f = open(filename)
     num_files = int(f.readline())
     f.readline()
@@ -19,8 +19,8 @@ def get_attr_name(opt):
     f.close()
     return attrs_name, attrs_type
 
-def get_Ctg_name(opt):
-    filename = "%s/Anno/list_category_cloth.txt" % opt.data_dir
+def get_Ctg_name(data_dir):
+    filename = "%s/Anno/list_category_cloth.txt"
     f = open(filename)
     f.readline()
     f.readline()
@@ -34,9 +34,3 @@ def get_Ctg_name(opt):
 
     f.close()
     return Ctg_name, Ctg_type
-
-
-if __name__ == "__main__":
-   op = Options()
-   opt = op.parse()
-   attr_name,attr_type = get_attr_name(opt)
