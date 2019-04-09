@@ -22,6 +22,7 @@ from util import util
 from data.input import get_attr_name, get_Ctg_name
 from tqdm import tqdm
 import pickle
+from collections import OrderedDict
 
 def forward_batch(model, criterion_softmax, criterion_binary, inputs, target_softmax, target_binary, target_bbox, opt, phase):
     if opt.cuda:
@@ -35,10 +36,6 @@ def forward_batch(model, criterion_softmax, criterion_binary, inputs, target_sof
     elif phase in ["valid", "test"]:
         model.eval()
 
-    # forward
-    #if len(opt.devices) > 1:
-    #    output_softmax, output_binary = nn.parallel.data_parallel(model, inputs_var, opt.devices)
-    #else:
     if phase in ["train"]:
         if len(opt.devices) > 1:
             output_softmax, output_binary, output_bbox = nn.parallel.data_parallel(model, inputs, opt.devices)
@@ -61,48 +58,34 @@ def forward_batch(model, criterion_softmax, criterion_binary, inputs, target_sof
 
     return output_binary, output_softmax, output_bbox, bin_loss, cls_loss, bbox_loss
 
-
-
-def forward_dataset(model, criterion_softmax, criterion_binary, data_loader, opt):
-    sum_batch = 0
-    avg_accuracy = torch.zeros(len(opt.top_k))
-    Sum_Num_correct_attr_type = torch.zeros(len(opt.top_k),6,dtype=torch.float)
-    avg_acc_per_type = torch.zeros(len(opt.top_k),6,dtype=torch.float)
-    Sum_Num_GT_attr_per_class = torch.zeros(len(opt.top_k),6,dtype=torch.float)
-    Sum_Correct_pred_pre_attr = torch.zeros(len(opt.top_k),opt.numattri,dtype=torch.float)
-    Sum_GT_attr_per_attr = torch.zeros(len(opt.top_k),opt.numattri,dtype=torch.float)
-    avg_acc_per_attr = torch.zeros(len(opt.top_k),opt.numattri,dtype=torch.float)
-
+def forward_dataset(model, criterion_softmax, criterion_binary, loader, opt):
     _, attr_type = get_attr_name(opt)
-    avg_loss = [0,0]
-    for i, data in enumerate(data_loader):
-        #print(len(data_loader))
-        if opt.mode == "test":
-            logging.info("test %s/%s image" % (i, len(data_loader)))
+    with torch.no_grad():
+        stats = OrderedDict()
+        pbar = tqdm(total=len(loader))
+        for i, data in enumerate(loader):
+            filepaths, ww, hh, inputs, target_softmax, target_binary, target_bbox = data
+            output_binary, output_softmax, output_bbox, bin_loss, cls_loss, bbox_loss = forward_batch(
+                model,
+                criterion_softmax, criterion_binary,
+                inputs,
+                target_softmax, target_binary, target_bbox,
+                opt,
+                'test')
+            acc_outputs = calc_accuracy(output_binary,
+                                        output_softmax,
+                                        target_softmax, target_binary,
+                                        opt.score_thres,
+                                        opt.top_k,
+                                        attr_type)
+            pbar.update(1)
+            for key in acc_outputs:
+                if key not in stats:
+                    stats[key] = []
+                stats[key].append(acc_outputs[key])
+        pbar.close()
+    return stats
 
-        sum_batch += 1
-        inputs, target_softmax,target_binary = data
-
-        output_binary, output_softmax, bin_loss, cls_loss = forward_batch(model, criterion_softmax, criterion_binary, inputs, target_softmax,target_binary, opt, "valid")
-        acc_softmax, Num_correct_attr_type, Num_GT_attr_per_class, Correct_pred_pre_attr, GT_attr_per_attr = calc_accuracy(output_binary, output_softmax, target_softmax,target_binary, opt.score_thres, opt.top_k,attr_type)
-
-          # accumulate accuracy
-        for k in range(len(opt.top_k)):
-            avg_accuracy[k] = acc_softmax[k] + avg_accuracy[k]
-            Sum_Num_correct_attr_type[k] = Sum_Num_correct_attr_type[k] + Num_correct_attr_type[k]
-            Sum_Num_GT_attr_per_class[k] = Sum_Num_GT_attr_per_class[k] + Num_GT_attr_per_class[k]
-            Sum_Correct_pred_pre_attr[k] = Sum_Correct_pred_pre_attr[k] + Correct_pred_pre_attr[k]
-            Sum_GT_attr_per_attr[k] = Sum_GT_attr_per_attr[k] + GT_attr_per_attr[k]
-        avg_loss = list( map(add, avg_loss, [bin_loss,cls_loss]))
-
-    # average on batches
-    avg_accuracy /=float(sum_batch)
-    for k in range(len(opt.top_k)):
-       avg_acc_per_type[k] = Sum_Num_correct_attr_type[k]/Sum_Num_GT_attr_per_class[k]
-       avg_acc_per_attr[k] = Sum_Correct_pred_pre_attr[k]/Sum_GT_attr_per_attr[k]
-    #avg_accuracy_bin /= float(sum_batch)
-    avg_loss = map(lambda x: x/(sum_batch), avg_loss)
-    return avg_accuracy, avg_acc_per_type,avg_acc_per_attr, avg_loss
 
 def save_model(model, optimizer, model_dir, epoch):
     """Save model
@@ -185,7 +168,9 @@ def calc_accuracy(output_binary, output_softmax, target_softmax, target_binary, 
                         recalls_at_k[j].append(n_correct / denominator)
             
             for j in range(1, 6):
-                bin_acc_dict["bin_acc%i_top%i" % (j, k)] = np.mean(recalls_at_k[j])
+                # to avoid nan'ing
+                if len(recalls_at_k[j]) > 0:
+                    bin_acc_dict["bin_acc%i_top%i" % (j, k)] = np.mean(recalls_at_k[j])
 
         # Merge the two dictionaries together.
         cls_acc_dict.update(bin_acc_dict)
@@ -196,6 +181,8 @@ def calc_accuracy(output_binary, output_softmax, target_softmax, target_binary, 
 def bbox_on_image(img_batch, gt_bbox_batch, pred_bbox_batch, out_file):
     n_images = img_batch.size(0)
     fig, axes = plt.subplots(n_images)
+    fig.set_figheight(10)
+    fig.set_figwidth(10)
     img_batch = img_batch.numpy()*0.5 + 0.5
     sz = img_batch.shape[3]
     for i in range(n_images):
@@ -254,7 +241,7 @@ def train(model, optimizer, criterion_softmax, criterion_binary, train_loader, v
                     target_softmax, target_binary, target_bbox,
                     opt,
                     loader_name)
-                loss = bin_loss + cls_loss + bbox_loss
+                loss = bin_loss + cls_loss + opt.beta*bbox_loss
                 
                 if loader_name == 'train':
                     loss.backward()
@@ -282,9 +269,8 @@ def train(model, optimizer, criterion_softmax, criterion_binary, train_loader, v
                     total_dict[key].append(pbar_dict[key])
 
                 if i == 0:
-                    print(filepaths)
-                    print(target_bbox)
-                    bbox_on_image(inputs, target_bbox, output_bbox.detach(), "test.png")
+                    bbox_on_image(inputs, target_bbox, output_bbox.detach(),
+                                  "%s/bbox_%i.png" % (opt.model_dir, epoch+1))
                     
 
         pbar.close()
@@ -358,16 +344,10 @@ def main():
     # why need to make the data dir??
     #if not os.path.exists(opt.data_dir):
     #    os.makedirs(opt.data_dir)
-    if opt.mode == "Train":
-        if not os.path.exists(opt.model_dir):
-            os.makedirs(opt.model_dir)
-        log_dir = opt.model_dir
-        log_path = log_dir + "/train.log"
-    if opt.mode == "Test":
-        if not os.path.exists(opt.test_dir):
-            os.makedirs(opt.test_dir)
-        log_dir = opt.test_dir
-        log_path = log_dir + "/test.log"
+    if not os.path.exists(opt.model_dir):
+        os.makedirs(opt.model_dir)
+    log_dir = opt.model_dir
+    log_path = log_dir + "/train.log"
 
     # save options to disk
     util.opt2file(opt, log_dir + "/opt.txt")
@@ -454,14 +434,13 @@ def main():
     '''
     
 
-    num_categories = opt.num_ctg
-    num_attrs = opt.num_attr
-
     # load model
     if not opt.local_features:
         resnet_class = FashionResnet
     else:
         resnet_class = None
+    num_categories = opt.num_ctg
+    num_attrs = opt.num_attr
     model = resnet_class(num_categories, num_attrs, opt.resnet_type)
     logging.info(model)
 
@@ -514,11 +493,10 @@ def main():
         criterion_softmax = criterion_softmax.cuda(opt.devices[0])
         criterion_binary = criterion_binary.cuda(opt.devices[0])
 
-    #def train(model, optimizer, criterion_softmax, criterion_binary, train_loader, val_loader, opt, epoch=0):
-
-        
+       
     # Train model
-    if opt.mode == "Train":
+    if opt.mode == "train":
+        logging.info("Running in train mode")
         train(model=model,
               optimizer=optimizer,
               criterion_softmax=criterion_softmax,
@@ -528,8 +506,27 @@ def main():
               opt=opt,
               epoch=last_epoch)
     # Test model
-    elif opt.mode == "Test":
-        test(model, criterion_softmax, criterion_binary, loader_valid, opt)
+    elif opt.mode == "validate":
+        logging.info("Running in validate mode")
+        accs = forward_dataset(model, criterion_softmax, criterion_binary, loader_valid, opt)
+        for key in accs:
+            print(key, np.mean(accs[key]))
+    elif opt.mode == "test":
+        logging.info("Running in test mode")
+        ds_test = DeepFashionDataset(root=opt.data_dir,
+                                     indices=test_idx,
+                                     attrs=attrs,
+                                     categories=categories,
+                                     bboxes=bboxes,
+                                     img_size=opt.img_size,
+                                     crop_size=opt.crop_size)
+        loader_test = DataLoader(ds_test,
+                                 shuffle=False,
+                                 batch_size=opt.batch_size,
+                                 num_workers=1)
+        accs = forward_dataset(model, criterion_softmax, criterion_binary, loader_test, opt)
+        for key in accs:
+            print(key, np.mean(accs[key]))
 
 
 if __name__ == "__main__":

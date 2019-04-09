@@ -9,7 +9,7 @@ class Options():
         self.parser.add_argument('--data_dir', default='/network/tmp1/ghadirif/DeepFashion', help='path to the data directory containing Img and annotation')
         #self.parser.add_argument('--results_dir', default='/network/tmp1/ghadirif/DeepFashion', help='path to the data directory containing Img and annotation')        
         self.parser.add_argument('--name', default='my_experiment', help='subdirectory name for training or testing, snapshot, splited dataset and test results exist here')
-        self.parser.add_argument('--mode', default='Train', help='run mode of training or testing. [Train | Test | train | test]')
+        self.parser.add_argument('--mode', default='train', choices=['train', 'validate', 'test'])
         self.parser.add_argument('--resnet_type', default='resnet18', choices=['resnet18', 'resnet34', 'resnet50', 'resnet101', 'resnet152']) 
         self.parser.add_argument('--img_size', type=int, default=256, help='scale image to the size prepared for croping')
         self.parser.add_argument('--crop_size', type=int, default=224, help='then crop image to the size as network input')
@@ -19,6 +19,7 @@ class Options():
         self.parser.add_argument('--loss', type=str, default='bce,', choices=['bce', 'hinge'], help='Loss function')
         self.parser.add_argument('--use_pretrain', action='store_true', help='If set, initialise resnet with pre-trained ImageNet weights')
         self.parser.add_argument('--local_features', action='store_true', help='')
+        self.parser.add_argument('--beta', type=float, default=1.0)
         
         self.parser.add_argument('--reduce_sum', action='store_true', help='If true, BCE loss is sum then mean')
         self.parser.add_argument('--pos_weights', action='store_true', help='If true, use pos_weights with BCELossWithLogits')
@@ -54,13 +55,6 @@ class Options():
 
     def parse(self):
         opt = self.parser.parse_args()
-        
-        # mode
-        if opt.mode not in ["Train", "Test", "train", "test"]:
-            raise Exception("cannot recognize flag `mode`")
-        opt.mode = opt.mode.capitalize()
-        if opt.mode == "Test":
-            opt.shuffle = False
 
         # devices id
         gpu_ids = opt.gpu_ids.split(',')
@@ -72,7 +66,6 @@ class Options():
         opt.cuda = False
         if len(opt.devices) > 0 and torch.cuda.is_available():
             opt.cuda = True
-
 
         opt.top_k = eval(opt.top_k)
 

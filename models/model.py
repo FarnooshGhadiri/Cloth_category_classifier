@@ -31,7 +31,8 @@ def gated_roi_pooling(input, rois, size=ROI_POOL_SIZE):
     for i in range(num_rois):
         roi = rois[i]
         im_idx = roi[0]
-        im = input.narrow(0, im_idx, 1)[..., roi[2]:(roi[4] + 1), roi[1]:(roi[3] + 1)]
+        #im = input.narrow(0, im_idx, 1)[..., roi[2]:(roi[4] + 1), roi[1]:(roi[3] + 1)]
+        im = input[im_idx][..., roi[2]:(roi[4] + 1), roi[1]:(roi[3] + 1)]
         mp = adaptive_max_pool(im, size)[0]
         output.append(mp)
 
