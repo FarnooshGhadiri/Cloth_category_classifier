@@ -3,7 +3,7 @@ import torch
 
 
 def get_attr_name(data_dir):
-    filename = "%s/Anno/list_attr_cloth.txt"
+    filename = "%s/Anno/list_attr_cloth.txt" % data_dir
     f = open(filename)
     num_files = int(f.readline())
     f.readline()
@@ -20,7 +20,7 @@ def get_attr_name(data_dir):
     return attrs_name, attrs_type
 
 def get_Ctg_name(data_dir):
-    filename = "%s/Anno/list_category_cloth.txt"
+    filename = "%s/Anno/list_category_cloth.txt" % data_dir
     f = open(filename)
     f.readline()
     f.readline()

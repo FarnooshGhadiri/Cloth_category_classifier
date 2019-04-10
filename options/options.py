@@ -20,6 +20,7 @@ class Options():
         self.parser.add_argument('--use_pretrain', action='store_true', help='If set, initialise resnet with pre-trained ImageNet weights')
         self.parser.add_argument('--local_features', action='store_true', help='')
         self.parser.add_argument('--beta', type=float, default=1.0)
+        self.parser.add_argument('--data_aug', action='store_true', help="Data augmentation (this should always be set!!!")
         
         self.parser.add_argument('--reduce_sum', action='store_true', help='If true, BCE loss is sum then mean')
         self.parser.add_argument('--pos_weights', action='store_true', help='If true, use pos_weights with BCELossWithLogits')

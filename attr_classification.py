@@ -64,7 +64,7 @@ def forward_dataset(model, criterion_softmax, criterion_binary, loader, opt):
         stats = OrderedDict()
         pbar = tqdm(total=len(loader))
         for i, data in enumerate(loader):
-            filepaths, ww, hh, inputs, target_softmax, target_binary, target_bbox = data
+            filepaths, inputs, target_softmax, target_binary, target_bbox = data
             output_binary, output_softmax, output_bbox, bin_loss, cls_loss, bbox_loss = forward_batch(
                 model,
                 criterion_softmax, criterion_binary,
@@ -180,13 +180,17 @@ def calc_accuracy(output_binary, output_softmax, target_softmax, target_binary, 
 
 def bbox_on_image(img_batch, gt_bbox_batch, pred_bbox_batch, out_file):
     n_images = img_batch.size(0)
-    fig, axes = plt.subplots(n_images)
+    fig, axes = plt.subplots(1, n_images)
     fig.set_figheight(10)
     fig.set_figwidth(10)
     img_batch = img_batch.numpy()*0.5 + 0.5
     sz = img_batch.shape[3]
     for i in range(n_images):
-        axes[i].imshow(img_batch[i].swapaxes(0,1).swapaxes(1,2))
+        if n_images == 1:
+            this_ax = axes
+        else:
+            this_ax = axes[i]
+        this_ax.imshow(img_batch[i].swapaxes(0,1).swapaxes(1,2))
         # (x1, y1, x2, y2)
         this_gt_bbox = gt_bbox_batch[i]*sz
         x1, y1, x2, y2 = this_gt_bbox
@@ -194,14 +198,14 @@ def bbox_on_image(img_batch, gt_bbox_batch, pred_bbox_batch, out_file):
                                  linewidth=1,
                                  edgecolor='b',
                                  facecolor='none')
-        axes[i].add_patch(rect)
+        this_ax.add_patch(rect)
         this_pred_bbox = pred_bbox_batch[i]*sz
         x1, y1, x2, y2 = this_pred_bbox
         rect = patches.Rectangle((x1, y1), x2-x1, y2-y1,
                                  linewidth=1,
                                  edgecolor='r',
                                  facecolor='none')
-        axes[i].add_patch(rect)
+        this_ax.add_patch(rect)
     plt.savefig(out_file)
     plt.close(fig)
 
@@ -233,7 +237,7 @@ def train(model, optimizer, criterion_softmax, criterion_binary, train_loader, v
             for i, data in enumerate(loader):
                 if loader_name == 'train':
                     optimizer.zero_grad()
-                filepaths, ww, hh, inputs, target_softmax, target_binary, target_bbox = data
+                filepaths, inputs, target_softmax, target_binary, target_bbox = data
                 output_binary, output_softmax, output_bbox, bin_loss, cls_loss, bbox_loss = forward_batch(
                     model,
                     criterion_softmax, criterion_binary,
@@ -384,8 +388,8 @@ def main():
             categories = dat['categories']
     '''
 
-    attrs = get_list_attr_img(opt.data_dir)
-    categories = get_list_category_img(opt.data_dir)
+    attrs = get_list_attr_img(opt.data_dir, max_lines=20)
+    categories = get_list_category_img(opt.data_dir, max_lines=20)
     bboxes = get_bboxes(opt.data_dir)
 
     
@@ -402,6 +406,7 @@ def main():
                                   attrs=attrs,
                                   categories=categories,
                                   bboxes=bboxes,
+                                  data_aug=opt.data_aug,
                                   img_size=opt.img_size,
                                   crop_size=opt.crop_size)
     ds_valid = DeepFashionDataset(root=opt.data_dir,
@@ -409,6 +414,7 @@ def main():
                                   attrs=attrs,
                                   categories=categories,
                                   bboxes=bboxes,
+                                  data_aug=opt.data_aug,
                                   img_size=opt.img_size,
                                   crop_size=opt.crop_size)
     '''

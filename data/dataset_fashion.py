@@ -2,7 +2,11 @@ import torch
 from torch.utils.data import Dataset
 from PIL import Image
 import torchvision.transforms as transforms
-from data.transformer import get_transformer
+#from data.transformer import get_transformer
+from data.transformer import (random_crop,
+                              horizontal_flip,
+                              resize,
+                              to_tensor)
 
 BAD_FILENAMES = [
     "Knit_Bodycon_Skirt/img_00000017.jpg",
@@ -113,6 +117,7 @@ class DeepFashionDataset(Dataset):
                  attrs,
                  categories,
                  bboxes,
+                 data_aug=False,
                  img_size=256,
                  crop_size=224,
                  mean=0.5,
@@ -135,29 +140,60 @@ class DeepFashionDataset(Dataset):
         self.bboxes = bboxes
         for arr in [attrs, categories, bboxes]:
             print("length: ", len(arr))
+        self.data_aug = data_aug
+        self.crop_size = crop_size
+        self.img_size = img_size
+        self.mean = mean
+        self.std = std
         
-        self.transformer = get_transformer(img_size=img_size,
-                                           crop_size=crop_size,
-                                           mean=mean,
-                                           std=std)
+        #self.transformer = get_transformer(img_size=img_size,
+        #                                   crop_size=crop_size,
+        #                                   mean=mean,
+        #                                   std=std)
 
     def __getitem__(self, index):
         this_filename = self.filenames[index]
+        print(this_filename, self.bboxes[this_filename])
+        
         filepath = "%s/DF_Img_Low/img/%s" % (self.root, this_filename)
         img = Image.open(filepath)
-        ww, hh = img.width, img.height
         img = img.convert("RGB")
-        img = self.transformer(img)
+        
+        if not self.data_aug:
+            # Resize the image to the crop size
+            bbox_label = self.bboxes[this_filename].clone()
+            img, bbox_label = resize(img, bbox_label, self.crop_size)
+            # Bring the bounding boxes to be in [0,1]
+            bbox_label[0] /= self.crop_size
+            bbox_label[2] /= self.crop_size
+            bbox_label[1] /= self.crop_size
+            bbox_label[3] /= self.crop_size
+        else:
+            bbox_label = self.bboxes[this_filename].clone()
+            # Resize the image to the image size
+            img, bbox_label = resize(img, bbox_label, self.img_size)
+            # Randomly crop an image of size crop_size
+            img, bbox_label = random_crop(img, bbox_label, self.crop_size)
+
+            # With 0.5 probability, horizontally flip
+            # the image
+            if torch.rand(1).item() < 0.5:
+                img, bbox_label = horizontal_flip(img, bbox_label)
+                
+            # Bring the bounding boxes to be in [0,1]
+            bbox_label[0] /= self.crop_size
+            bbox_label[2] /= self.crop_size
+            bbox_label[1] /= self.crop_size
+            bbox_label[3] /= self.crop_size
+
+        img = (to_tensor(img) - self.mean) / self.std
+
+        #img = self.transformer(img)
+        
         attr_label = self.attrs[this_filename]
         category_label = self.categories[this_filename]
-        # Get the bbox label and normalise it based on
-        # the height and width of the image.
-        bbox_label = self.bboxes[this_filename].clone()
-        bbox_label[0] /= ww
-        bbox_label[2] /= ww
-        bbox_label[1] /= hh
-        bbox_label[3] /= hh
-        return filepath, ww, hh, img, category_label, attr_label, bbox_label
+        
+        return filepath, img, category_label, attr_label, bbox_label
 
     def __len__(self):
         return len(self.indices)
