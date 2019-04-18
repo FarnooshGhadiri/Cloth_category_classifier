@@ -66,7 +66,7 @@ class FashionResnet(nn.Module):
         self.fc_bbox_xy = nn.Linear(32*7*7, 2)
         self.fc_bbox_offset = nn.Linear(32*7*7, 2)
         
-        self.tot_dim = self.output_dim + (3*3*512)
+        self.tot_dim = self.output_dim + (3*3*self.output_dim)
     
         self.fc_bin = nn.Linear(self.tot_dim, self.num_attrs)
         self.fc_cls = nn.Linear(self.tot_dim, self.num_categories)
@@ -92,9 +92,20 @@ class FashionResnet(nn.Module):
         if x.is_cuda:
             batch_ids = batch_ids.cuda()
         bbox_new = torch.cat((batch_ids, bbox), dim=1)
-        bbox_new[:, 1:] = bbox_new[:, 1:] * self.SPATIAL_DIM
-        
-        local_features = gated_roi_pooling(base_features, rois=bbox_new)
+        bbox_new[:, 1:] = bbox_new[:, 1:] * (self.SPATIAL_DIM-1)
+
+        try:
+            local_features = gated_roi_pooling(base_features, rois=bbox_new)
+        except:
+            print("DEBUG:")
+            print("bbox_new:")
+            print(bbox_new)
+            print("bbox_xy:")
+            print(bbox_xy)
+            print("bbox_offset:")
+            print(bbox_offset)
+            raise Exception()
+            
         local_features = local_features.reshape(-1, self.output_dim*3*3)
         
         # Ok, compute global features 

@@ -153,7 +153,6 @@ class DeepFashionDataset(Dataset):
 
     def __getitem__(self, index):
         this_filename = self.filenames[index]
-        print(this_filename, self.bboxes[this_filename])
         
         filepath = "%s/DF_Img_Low/img/%s" % (self.root, this_filename)
         img = Image.open(filepath)

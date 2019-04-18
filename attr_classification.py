@@ -388,8 +388,8 @@ def main():
             categories = dat['categories']
     '''
 
-    attrs = get_list_attr_img(opt.data_dir, max_lines=20)
-    categories = get_list_category_img(opt.data_dir, max_lines=20)
+    attrs = get_list_attr_img(opt.data_dir)
+    categories = get_list_category_img(opt.data_dir)
     bboxes = get_bboxes(opt.data_dir)
 
     
@@ -438,7 +438,6 @@ def main():
                              batch_size=opt.batch_size,
                              num_workers=1)
     '''
-    
 
     # load model
     if not opt.local_features:

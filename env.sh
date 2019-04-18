@@ -35,7 +35,7 @@ if [ ! -d ${TMP_DIR} ]; then
 fi
 
 echo 'copying images...'
-if [ ! -d ${TMP_DIR}/DF_Img ]; then
+if [ ! -d ${TMP_DIR}/DF_Img_Low ]; then
   scp ${DF_IMG} ${TMP_DIR}
   `cd ${TMP_DIR} && unzip -o DF_Img_Low.zip`
 fi
