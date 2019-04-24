@@ -1,27 +1,52 @@
+# Cloth_category_classifier
 
-<h1>Cloth_category_classifier</h1>
-A pytorch implemented classifier for category classification and attribute prediction on DeepFashion dataset.
+A PyTorch classifier for the DeepFashion dataset which performs category, attribute, and bounding box prediction.
 
-<h2> Module</h2>
+## Setting up the project
 
-<ul>
-<li> <h3>Data</h3> 
- Data preparation module consisting of reading and transforming data. 
-<br/> The directory structure after downloading and extracting dataset:
-<br/># fashion_data/
-<br/># ---Anno
-<br/># ------list_attr_cloth.txt
-<br/># ------list_attr_img.txt
-<br/># ------list_category_cloth.txt
-<br/># ------list_category_img.txt 
-<br/># ---High-res
-<br/># -----Img
-<br/># -------img "Contains high resolutiom images used for training, validation and testing"
- 
- 
- <li><h3>Model</h3>
-  <br/> Resnet18
-<li><h3>Test</h3>
- <br/>Deepfashion dataset
-</ul>
-</li>
+### Cloning the repository:
+`$ git clone https://github.com/simonguiroy/RecognizingViolentActions.git`
+
+### Environment setup
+
+1. Install Anaconda, if not already done, by following these instructions:
+https://docs.anaconda.com/anaconda/install/linux/  
+
+2. Create a conda environment using the `environment.yaml` file, to install the dependencies:  
+`$ conda env create -f environment.yaml`
+
+3. Activate the new conda environment:
+`$ conda activate RecognizingViolentActions`
+
+### Getting the data
+
+1. You can download the dataset from the Google Drive here:
+https://drive.google.com/drive/folders/0B7EVK8r0v71pWGplNFhjc01NbzQ
+
+2. Extract the dataset into some directory which is appropriate
+
+## Running experiments
+
+### Training the models
+
+The script used to train a model is `attr_classification.py`. Here is the main script we used to train our best model:
+
+```
+python attr_classification.py \
+--img_size=256 \
+--crop_size=224 \
+--num_workers=8 \
+--data_dir=<path_to_data_dir> \
+--batch_size=32 \
+--name=<experiment_name> \
+--reduce_sum \
+--beta=0.001 \
+--resume=auto \
+--epochs=200 \
+--data_aug \
+--lr=2e-4
+```
+
+To understand what each keyword argument is, simply run `python attr_classification.py --help`. For the sake of convenience, the table below describes what each of the arguments does:
+
+
