@@ -34,6 +34,10 @@ class Options():
                                  If set to 0, then bbox prediction will be disabled.""")
         self.parser.add_argument('--data_aug', action='store_true',
                                  help="Use data augmentation (this should always be set!!!)?")
+        self.parser.add_argument('--fp16', action='store_true',
+                                 help="""Do float16 computation? (Requires nvidia apex library)
+                                 Apart from giving GPU memory savings, this may also speed up
+                                 training.""")
         
         self.parser.add_argument('--reduce_sum', action='store_true', help='If true, BCE loss is sum then mean')
 

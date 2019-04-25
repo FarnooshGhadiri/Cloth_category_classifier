@@ -23,6 +23,16 @@ from data.input import get_attr_name, get_ctg_name
 from tqdm import tqdm
 from collections import OrderedDict
 
+amp_imported = True
+try:
+    from apex import amp
+except ImportError:
+    logging.warning("""Tried to import apex but failed.
+    (Don't worry about this error, unless you have --fp16
+    enabled.)
+    """)
+    amp_imported = False
+
 def forward_batch(model, criterion_softmax, criterion_binary, inputs, target_softmax, target_binary, target_bbox, opt, phase):
     """Perform a forward pass on a batch.
 
@@ -280,7 +290,11 @@ def train(model, optimizer, criterion_softmax, criterion_binary, train_loader, v
                 loss = bin_loss + cls_loss + opt.beta*bbox_loss
                 
                 if loader_name == 'train':
-                    loss.backward()
+                    if opt.fp16:
+                        with amp.scale_loss(loss, optimizer) as scaled_loss:
+                            scaled_loss.backward()
+                    else:
+                        loss.backward()
                     optimizer.step()
 
                 acc_outputs = calc_accuracy(output_binary,
@@ -496,6 +510,19 @@ def main():
         criterion_softmax = criterion_softmax.cuda(opt.devices[0])
         criterion_binary = criterion_binary.cuda(opt.devices[0])
 
+    # float16
+    if opt.fp16:
+        if not amp_imported:
+            raise Exception(
+                """Was not able to import apex library. This is
+                required for float16 mode."""
+            )
+        model, optimizer = amp.initialize(
+            model,
+            optimizer,
+            enabled=True,
+            opt_level='O1'
+        )
        
     # Train model
     if opt.mode == "train":
