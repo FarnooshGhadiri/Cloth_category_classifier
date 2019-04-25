@@ -21,10 +21,23 @@ from torch.utils.data import DataLoader
 from util import util
 from data.input import get_attr_name, get_ctg_name
 from tqdm import tqdm
-import pickle
 from collections import OrderedDict
 
 def forward_batch(model, criterion_softmax, criterion_binary, inputs, target_softmax, target_binary, target_bbox, opt, phase):
+    """Perform a forward pass on a batch.
+
+    :param model:
+    :param criterion_softmax: loss function for category classification
+    :param criterion_binary: loss function for attribute classification
+    :param inputs: inputs from DataLoader
+    :param target_softmax: class label for category classification
+    :param target_binary: attribute label for attribute classificatiion
+    :param target_bbox: label for bounding box regression
+    :param opt: options dictionary
+    :param phase: either 'train', 'valid', or 'test'
+    :returns: a tuple in the form: (attribute output, classification output,
+      bbox output, attribute loss, classification loss, and bbox loss)
+    """
     if opt.cuda:
         inputs = inputs.cuda(opt.devices[0])
         target_binary = target_binary.cuda(opt.devices[0])
@@ -35,6 +48,8 @@ def forward_batch(model, criterion_softmax, criterion_binary, inputs, target_sof
         model.train()
     elif phase in ["valid", "test"]:
         model.eval()
+    else:
+        raise Exception("phase must be either train, valid, or test!")
 
     if phase in ["train"]:
         if len(opt.devices) > 1:
@@ -55,10 +70,19 @@ def forward_batch(model, criterion_softmax, criterion_binary, inputs, target_sof
     cls_loss = criterion_softmax(output_softmax, target_softmax)
     # Calculate loss for bounding boxes.
     bbox_loss = torch.mean(torch.abs(output_bbox-target_bbox))
-
     return output_binary, output_softmax, output_bbox, bin_loss, cls_loss, bbox_loss
 
 def forward_dataset(model, criterion_softmax, criterion_binary, loader, opt):
+    """Perform a forward pass through a dataset.
+
+    :param model: 
+    :param criterion_softmax: loss function for category classification
+    :param criterion_binary:  loss function for attribute classification
+    :param loader: data loader to perform the forward pass through
+    :param opt: option dictionary
+    :returns: a dictionary of relevant statistics
+    """
+    
     _, attr_type = get_attr_name(opt.data_dir)
     with torch.no_grad():
         stats = OrderedDict()
@@ -75,7 +99,6 @@ def forward_dataset(model, criterion_softmax, criterion_binary, loader, opt):
             acc_outputs = calc_accuracy(output_binary,
                                         output_softmax,
                                         target_softmax, target_binary,
-                                        opt.score_thres,
                                         opt.top_k,
                                         attr_type)
             pbar.update(1)
@@ -88,26 +111,30 @@ def forward_dataset(model, criterion_softmax, criterion_binary, loader, opt):
 
 
 def save_model(model, optimizer, model_dir, epoch):
-    """Save model
+    """Save model and its optimizer state.
 
-    :param model: model state to save 
-    :param optimizer: optim state to save
-    :param model_dir: 
+    :param model: model whose state is to be saved
+    :param optimizer: optimizer whose state is to be saved
+    :param model_dir: where to save the model
     :param epoch: epoch # to save
     :returns: 
-    :rtype: 
-
     """
     checkpoint_name = "%s/epoch_%s.pth" % (model_dir, epoch)
     dd = {'model': model.state_dict(),
           'optim': optimizer.state_dict(),
           'epoch': epoch}
     torch.save(dd, checkpoint_name)
-    #torch.save(model.cpu().state_dict(), checkpoint_name)
-    #if opt.cuda and torch.cuda.is_available():
-    #    model.cuda(opt.devices[0])
 
 def load_model(model, optimizer, checkpoint, devices=[]):
+    """Load model and its optimizer state.
+
+    :param model: model whose weights are to be loaded
+    :param optimizer: optimizer
+    :param checkpoint: path to the checkpoint file
+    :param devices:
+    :returns:
+    """
+    
     dd = torch.load(checkpoint)
     model.load_state_dict(dd['model'])
     if 'optim' in dd:
@@ -119,12 +146,21 @@ def load_model(model, optimizer, checkpoint, devices=[]):
                     param_state[key] = param_state[key].cuda(devices[0])
     return dd['epoch']
 
-def indices_to_binary(indices, length):
-    tmp = torch.zeros(length).float()
-    tmp[indices] = 1
-    return tmp
+def calc_accuracy(output_binary, output_softmax, target_softmax, target_binary, top_k, attr_type_num):
+    """Compute accuracy and recall metrics.
+    TODO: this is quite a hefty method which may need a bit of refactoring
 
-def calc_accuracy(output_binary, output_softmax, target_softmax, target_binary, score_thres, top_k, attr_type_num):
+    :param output_binary: output from attribute classification
+    :param output_softmax: output from category classfication
+    :param target_softmax: ground truth for category classification
+    :param target_binary: ground truth for attribute classification
+    :param top_k: tuple of numbers (k1,k2,...) such that we compute
+      metrics for top-k1, top-k2, etc.
+    :param attr_type_num: a vector v of integers (same length as the #
+      of attributes in the dataset) where v[i] \in {1,..5} denotes the
+      'attribute category' of that particular attribute.
+    :returns: 
+    """
 
     with torch.no_grad():
     
@@ -166,17 +202,13 @@ def calc_accuracy(output_binary, output_softmax, target_softmax, target_binary, 
                         n_correct = len(set(this_gt_indices).intersection(set(this_pred_indices)))
                         denominator = min(k, len(this_gt_indices))
                         recalls_at_k[j].append(n_correct / denominator)
-            
             for j in range(1, 6):
                 # to avoid nan'ing
                 if len(recalls_at_k[j]) > 0:
                     bin_acc_dict["bin_acc%i_top%i" % (j, k)] = np.mean(recalls_at_k[j])
-
         # Merge the two dictionaries together.
         cls_acc_dict.update(bin_acc_dict)
-
         return cls_acc_dict
-
 
 def bbox_on_image(img_batch, gt_bbox_batch, pred_bbox_batch, out_file):
     n_images = img_batch.size(0)
@@ -254,7 +286,6 @@ def train(model, optimizer, criterion_softmax, criterion_binary, train_loader, v
                 acc_outputs = calc_accuracy(output_binary,
                                             output_softmax,
                                             target_softmax, target_binary,
-                                            opt.score_thres,
                                             opt.top_k,
                                             attr_type)
 
@@ -291,14 +322,10 @@ def train(model, optimizer, criterion_softmax, criterion_binary, train_loader, v
         f_csv.write(csv_values_comma + "\n")
         f_csv.flush()
 
-
-        #if epoch % opt.save_epoch_freq == 0:
-        #    logging.info('saving the model at the end of epoch %d, iters %d' % (epoch + 1, total_batch_iter))
         if (epoch+1) % opt.save_every == 0:
             save_model(model, optimizer, opt.model_dir, epoch + 1)
 
     logging.info("--------Optimization Done--------")
-
 
 def validate(model, criterion_softmax, criterion_binary, val_set, opt):
     return forward_dataset(model, criterion_softmax, criterion_binary, val_set, opt)
@@ -311,7 +338,6 @@ class HingeLoss(nn.Module):
         return nn.ReLU()(1. - target_ctr*output)
     
 def main():
-
 
     print("parse opt...")
     
@@ -326,9 +352,6 @@ def main():
     opt.test_dir = os.path.join(opt.data_dir, "Test")
     logging.info("Test directory: %s" % opt.test_dir)
 
-    # why need to make the data dir??
-    #if not os.path.exists(opt.data_dir):
-    #    os.makedirs(opt.data_dir)
     if not os.path.exists(opt.model_dir):
         os.makedirs(opt.model_dir)
     log_dir = opt.model_dir
@@ -372,7 +395,6 @@ def main():
     attrs = get_list_attr_img(opt.data_dir)
     categories = get_list_category_img(opt.data_dir)
     bboxes = get_bboxes(opt.data_dir)
-
     
     indices = list(range(len(attrs.keys())))
     rnd_state = np.random.RandomState(0)
@@ -421,13 +443,8 @@ def main():
     '''
 
     # load model
-    if not opt.local_features:
-        resnet_class = FashionResnet
-    else:
-        resnet_class = None
-    num_categories = opt.num_ctg
-    num_attrs = opt.num_attr
-    model = resnet_class(num_categories, num_attrs, opt.resnet_type)
+    resnet_class = FashionResnet
+    model = resnet_class(50, 1000, opt.resnet_type)
     logging.info(model)
 
     if opt.optimizer == 'adam':
