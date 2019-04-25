@@ -12,7 +12,7 @@ Note that we also use the data described here to augment our classifier with bou
 ## Setting up the project
 
 ### Cloning the repository:
-`$ git clone https://github.com/simonguiroy/RecognizingViolentActions.git`
+`$ git clone https://github.com/FarnooshGhadiri/Cloth_category_classifier.git`
 
 ### Environment setup
 
@@ -25,6 +25,8 @@ https://docs.anaconda.com/anaconda/install/linux/
 3. Activate the new conda environment:
 `$ conda activate RecognizingViolentActions`
 
+4. (Optional) We also have implemented support for nvidia's mixed precision training library [Apex](https://github.com/NVIDIA/apex), which allows for float16 training (this can speed up training and provide memory savings on the GPU). Please see their README file for instructions on how to install this. Once it is installed, you can make use of it by appending `--fp16` to your training script.
+
 ### Getting the data
 
 1. You can download the dataset from the Google Drive here:
@@ -36,10 +38,10 @@ https://drive.google.com/drive/folders/0B7EVK8r0v71pWGplNFhjc01NbzQ
 
 ### Training the models
 
-The script used to train a model is `attr_classification.py`. Here is the script we used to train our *best* model:
+The script used to train a model is `train.py`. Here is the script we used to train our *best* model:
 
 ```
-python attr_classification.py \
+python train.py \
 --img_size=256 \
 --crop_size=224 \
 --num_workers=8 \
@@ -54,8 +56,8 @@ python attr_classification.py \
 --lr=2e-4
 ```
 
-To understand what each keyword argument is, simply run `python attr_classification.py --help`.
+To understand what each keyword argument is, simply run `python train.py --help`.
 
-While the model is training, after each epoch it will output a row of data to `<experiment_name>/results.txt` which detail various things worth tracking such as the losses and accuracies on both the training and validation set.
+While the model is training, after each epoch it will append a row of statistics to `<experiment_name>/results.txt`, which details various things worth tracking such as the losses and accuracies on both the training and validation set. This is useful for diagnosing model training.
 
 ### Testing the models
