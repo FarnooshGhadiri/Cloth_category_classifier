@@ -64,8 +64,10 @@ During model training, after each epoch the script will append model statistics 
 
 ### Testing the models
 
-We have provided a pre-trained model which you can use here.
+We have provided a pre-trained model which you can use by simply running:
+```
+bash download_pretrained.sh
+```
+This will download a model checkpoint and place it inside `results/pretrained_model`.
 
-```
-mkdir -p results/our_model
-```
+This model was trained with example script mentioned in the model training section. For more details about this model, e.g. statistics on how well it performs, please see the wiki section of this repository.
