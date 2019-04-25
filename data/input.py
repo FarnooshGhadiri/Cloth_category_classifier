@@ -19,7 +19,7 @@ def get_attr_name(data_dir):
     f.close()
     return attrs_name, attrs_type
 
-def get_Ctg_name(data_dir):
+def get_ctg_name(data_dir):
     filename = "%s/Anno/list_category_cloth.txt" % data_dir
     f = open(filename)
     f.readline()
@@ -31,6 +31,5 @@ def get_Ctg_name(data_dir):
        word2 = line.strip()[-1]
        Ctg_name.append(word)
        Ctg_type.append(word2)
-
     f.close()
     return Ctg_name, Ctg_type

@@ -19,7 +19,7 @@ from models.model import FashionResnet
 from options.options import Options
 from torch.utils.data import DataLoader
 from util import util
-from data.input import get_attr_name, get_Ctg_name
+from data.input import get_attr_name, get_ctg_name
 from tqdm import tqdm
 import pickle
 from collections import OrderedDict
@@ -302,25 +302,6 @@ def train(model, optimizer, criterion_softmax, criterion_binary, train_loader, v
 
 def validate(model, criterion_softmax, criterion_binary, val_set, opt):
     return forward_dataset(model, criterion_softmax, criterion_binary, val_set, opt)
-
-
-def test(model, criterion_softmax, criterion_binary, test_set, opt):
-    logging.info("####################Test Model###################")
-    avg_test_accuracy, avg_acc_per_type, avg_acc_per_attr, avg_test_loss = forward_dataset(model, criterion_softmax,
-                                                                                         criterion_binary, test_set,
-                                                                                         opt)
-    util.print_loss(avg_test_loss, "Test", 0, 0)
-    util.print_accuracy_soft(avg_test_accuracy, "Test", 0, 0)
-    util.print_accuracy_attr(avg_acc_per_type, avg_acc_per_attr, "Test", 0, 0)
-    logging.info("data_dir:   " + opt.data_dir + "/TestSet/")
-    logging.info("score_thres:" + str(opt.score_thres))
-
-    for k in range(0, avg_acc_per_type.size(0)):
-        logging.info("----Accuracy of Top%d: %f" % (opt.top_k[k], avg_acc_per_type[k, 0]))
-
-    logging.info("----Average test accuracy %f" % (avg_test_accuracy))
-    logging.info("#################Finished Testing################")
-
 
 class HingeLoss(nn.Module):
     def __init__(self):
