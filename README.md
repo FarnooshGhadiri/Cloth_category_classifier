@@ -1,8 +1,10 @@
 # Cloth_category_classifier
 
-A PyTorch classifier for the DeepFashion dataset which performs category, attribute, and bounding box prediction. To quote the description from the main website:
+![img](http://mmlab.ie.cuhk.edu.hk/projects/DeepFashion/attributes.jpg)
 
-*Category and Attribute Prediction Benchmark* evaluates the performance of clothing category and attribute prediction. This is a large subset of DeepFashion, containing massive descriptive clothing categories and attributes in the wild. It contains:
+A PyTorch classifier for the DeepFashion dataset which performs category, attribute, and bounding box prediction. To quote the description from the [main webpage](http://mmlab.ie.cuhk.edu.hk/projects/DeepFashion.html):
+
+[The DeepFashion dataset] *Category and Attribute Prediction Benchmark* evaluates the performance of clothing category and attribute prediction. This is a large subset of DeepFashion, containing massive descriptive clothing categories and attributes in the wild. It contains:
 - 289,222 number of clothes images;
 - 50 number of clothing categories, and 1,000 number of clothing attributes;
 - Each image is annotated by bounding box and clothing type.
@@ -23,7 +25,7 @@ https://docs.anaconda.com/anaconda/install/linux/
 `$ conda env create -f environment.yaml`
 
 3. Activate the new conda environment:
-`$ conda activate RecognizingViolentActions`
+`$ conda activate deepfashion`
 
 4. (Optional) We also have implemented support for nvidia's mixed precision training library [Apex](https://github.com/NVIDIA/apex), which allows for float16 training (this can speed up training and provide memory savings on the GPU). Please see their README file for instructions on how to install this. Once it is installed, you can make use of it by appending `--fp16` to your training script.
 
@@ -58,6 +60,12 @@ python train.py \
 
 To understand what each keyword argument is, simply run `python train.py --help`.
 
-While the model is training, after each epoch it will append a row of statistics to `<experiment_name>/results.txt`, which details various things worth tracking such as the losses and accuracies on both the training and validation set. This is useful for diagnosing model training.
+During model training, after each epoch the script will append model statistics to `<experiment_name>/results.txt`, which details various things such as the losses and accuracies on both the training and validation set. This is useful for diagnosing model training.
 
 ### Testing the models
+
+We have provided a pre-trained model which you can use here.
+
+```
+mkdir -p results/our_model
+```
