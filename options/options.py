@@ -38,6 +38,7 @@ class Options():
 
         self.parser.add_argument('--optimizer', type=str, default='adam', choices=['sgd', 'adam'])
         self.parser.add_argument('--lr', type=float, default=1e-4, help='initial learning rate')
+        self.parser.add_argument('--eps', type=float, default=1e-10, help='eps for adam')
         self.parser.add_argument('--gamma', type=float, default=0.1, help='multiplicative factor of learning rate decay.')
 
         ## for test

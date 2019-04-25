@@ -450,7 +450,7 @@ def main():
     logging.info(model)
 
     if opt.optimizer == 'adam':
-        optimizer = optim.Adam(model.parameters(), lr=opt.lr)
+        optimizer = optim.Adam(model.parameters(), lr=opt.lr, eps=opt.eps)
     else:
         optimizer = optim.SGD(model.parameters(), lr=opt.lr, momentum=0.9)
     
