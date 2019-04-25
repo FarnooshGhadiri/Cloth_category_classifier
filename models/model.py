@@ -6,42 +6,8 @@ import torch
 from torch import nn
 from torchvision.models import resnet
 import numpy as np
-
-ROI_POOL_SIZE = (3,3)
-from torch.nn import AdaptiveMaxPool2d
-def gated_roi_pooling(input, rois, size=ROI_POOL_SIZE):
-    """
-    Standard roi-pooling extended to accept a mask vector (gates) wich will set all activations to zero for
-    correspnding features
-    :param input: features (for instance  feature maps from vgg/resnet
-    :param rois: rois [batch_id, x1, y1, x2, y2]
-    :param gates: mask vector with shape [len(gates), 1]
-    :param size: size of the pooled regions (for instance (3,3)
-    :param spatial_scale:
-    :return:
-    """
-    assert (rois.dim() == 2)
-    assert (rois.size(1) == 5)
-    output = []
-    #rois = rois.data.float()
-    num_rois = rois.size(0)
-
-    #rois[:, 1:].mul_(spatial_scale)
-    rois = rois.long()
-    for i in range(num_rois):
-        roi = rois[i]
-        im_idx = roi[0]
-        #im = input.narrow(0, im_idx, 1)[..., roi[2]:(roi[4] + 1), roi[1]:(roi[3] + 1)]
-        im = input[im_idx][..., roi[2]:(roi[4] + 1), roi[1]:(roi[3] + 1)]
-        mp = adaptive_max_pool(im, size)[0]
-        output.append(mp)
-
-    pooled_features = torch.cat(output, 0)
-
-    return pooled_features.view(input.shape[0], -1, ROI_POOL_SIZE[0], ROI_POOL_SIZE[1])
-
-def adaptive_max_pool(input, size):
-    return AdaptiveMaxPool2d(size[0], size[1])(input)
+from .roi_pooling import (gated_roi_pooling,
+                          adaptive_max_pool)
 
 class FashionResnet(nn.Module):
 
