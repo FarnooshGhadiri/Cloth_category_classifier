@@ -52,7 +52,12 @@ def get_list_category_img(root, max_lines=-1):
         filename = line[0].replace("img/", "")
         if filename in BAD_FILENAMES:
             continue
-        category = int(line[-1])
+        # BUG: The label is meant to be zero-indexed, but
+        # it looks like I forgot to do this. This means
+        # that at test time, when you grab the predicted
+        # label using argmax(), subtract 1 so that it is
+        # now zero-indexed.
+        category = int(line[-1]) # should be int(line[-1])-1
         dd[filename] = category
         if i == max_lines:
             break

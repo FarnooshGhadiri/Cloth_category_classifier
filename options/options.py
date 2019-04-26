@@ -25,7 +25,9 @@ class Options():
         self.parser.add_argument('--gpu_ids', type=str, default='0',
                                  help="""Comma-separated numbers denoting gpu ids,
                                  e.g. 0  0,1,2, 0,2. use -1 for CPU""")
-        self.parser.add_argument('--loss', type=str, default='bce,', choices=['bce', 'hinge'], help='Loss function')
+        self.parser.add_argument('--loss', type=str, default='bce',
+                                 choices=['bce', 'hinge'],
+                                 help='Loss function for attribute prediction')
         
         #self.parser.add_argument('--use_pretrain', action='store_true', help='If set, initialise resnet with pre-trained ImageNet weights')
         

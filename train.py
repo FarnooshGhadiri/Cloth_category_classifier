@@ -135,7 +135,7 @@ def save_model(model, optimizer, model_dir, epoch):
           'epoch': epoch}
     torch.save(dd, checkpoint_name)
 
-def load_model(model, optimizer, checkpoint, devices=[]):
+def load_model(model, checkpoint, optimizer=None, devices=[]):
     """Load model and its optimizer state.
 
     :param model: model whose weights are to be loaded
@@ -147,7 +147,7 @@ def load_model(model, optimizer, checkpoint, devices=[]):
     
     dd = torch.load(checkpoint)
     model.load_state_dict(dd['model'])
-    if 'optim' in dd:
+    if 'optim' in dd and optimizer is not None:
         optimizer.load_state_dict(dd['optim'])
         for p in optimizer.state.keys():
             param_state = optimizer.state[p]
@@ -362,9 +362,6 @@ def main():
     # initialize train or test working dir
     opt.model_dir = os.path.join("results", opt.name)
     logging.info("Model directory: %s" % opt.model_dir)
-    #opt.data_dir = os.path.join(opt.data_dir, trainer_dir, "Data")
-    opt.test_dir = os.path.join(opt.data_dir, "Test")
-    logging.info("Test directory: %s" % opt.test_dir)
 
     if not os.path.exists(opt.model_dir):
         os.makedirs(opt.model_dir)
@@ -457,8 +454,7 @@ def main():
     '''
 
     # load model
-    resnet_class = FashionResnet
-    model = resnet_class(50, 1000, opt.resnet_type)
+    model = FashionResnet(50, 1000, opt.resnet_type)
     logging.info(model)
 
     if opt.optimizer == 'adam':
@@ -479,10 +475,10 @@ def main():
                 # Get creation time and use that.
                 latest_chkpt = max(files, key=os.path.getctime)
                 logging.info("Auto-resume mode found latest checkpoint: %s" % latest_chkpt)
-                last_epoch = load_model(model, optimizer, latest_chkpt, devices=opt.devices)
+                last_epoch = load_model(model, latest_chkpt, optimizer, devices=opt.devices)
         else:
             logging.info("Loading checkpoint: %s" % opt.resume)
-            last_epoch = load_model(model, optimizer, opt.resume, devices=opt.devices)
+            last_epoch = load_model(model, opt.resume, optimizer, devices=opt.devices)
 
     #Weight_attribute = get_weight_attr_img(opt)
    # print(len(Weight_attribute))
