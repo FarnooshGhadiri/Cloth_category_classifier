@@ -73,9 +73,31 @@ We have provided a pre-trained model which you can use by simply running:
 ```
 bash download_pretrained.sh
 ```
-This will download a model checkpoint and place it inside `results/pretrained_model`.
+This will download a model checkpoint and place it inside `results/pretrained_model`. (This model was trained with example script mentioned in the model training section. For more details about this model, e.g. statistics on how well it performs, please see the wiki section of this repository.)
 
-This model was trained with example script mentioned in the model training section. For more details about this model, e.g. statistics on how well it performs, please see the wiki section of this repository.
+Once this is done, you can use the script `test_on_image.py` to classify an image, for example:
+```
+python test_on_image.py \
+--df_dir=<path_to_deepfashion_dir> \
+--checkpoint=<path_to_checkpoint> \
+--filename=<path_to_image> \
+--out_file=<path_to_output>
+```
+
+Alternatively, you can process many images at once by using `--filenames` (instead of `--filename`) and `--out_folder` (instead of `--out_file`). Here is an example:
+
+```
+# process all images in Boxy_Pocket_Top
+IMGS=`find '/tmp/beckhamc/deep_fashion/DF_Img_Low/img/Boxy_Pocket_Top' -path '*.jpg' | tr '\n' ','`
+python test_on_image.py \
+--df_dir=/tmp/beckhamc/deep_fashion/ \
+--checkpoint=results/pretrained_model/epoch_340.pth \
+--filenames="${IMGS}" \
+--out_folder=predictions/
+```
+
+To see the full list of options, simply run `python test_on_image.py --help`. Some extra options are `--top_k` (how many of the top attributes to retain per attribute category, which is the number of slices in the pie plots); and `--softmax_temp` (this is useful if the predictions are overly confident and you would like to give more weight to the classes with the smaller logits).
+
 
 ## Known issues
 
