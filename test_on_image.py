@@ -7,6 +7,7 @@ from matplotlib import patches
 # other imports
 import numpy as np
 import torch
+import os
 from torchvision.transforms import (Compose,
                                     Resize, 
                                     Normalize, 
@@ -17,6 +18,7 @@ from PIL import Image
 from models.model import FashionResnet
 from data.dataset_fashion import get_attr_names_and_types
 from data import input
+from util import util
 import argparse
 
 def parse_args():
@@ -24,18 +26,40 @@ def parse_args():
     parser.add_argument('--df_dir', type=str, required=True,
                         help="""Directory to DeepFashion directory which contains
                         the 'Anno' folder.""")
-    parser.add_argument('--filename', type=str, required=True,
-                        help="""Filename of the image you wish to classify.""")
+    # Either you specify a filename or a comma-separated list of
+    # filenames.
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument('--filename', type=str,
+                       help="Filename of the image you wish to classify.")
+    group.add_argument('--filenames', type=str,
+                       help="Filenames (space-separated) of the images you wish to classify.")
+    # If a filename is provided, you must use `out_file`, otherwise,
+    # you use `out_folder`.
+    group2 = parser.add_mutually_exclusive_group(required=True)
+    group2.add_argument('--out_file', type=str,
+                        help="Output file")
+    group2.add_argument('--out_folder', type=str,
+                        help="Output folder")
     parser.add_argument('--resnet_type', default='resnet18',
                         choices=['resnet18', 'resnet34', 'resnet50', 'resnet101', 'resnet152'],
-                        help="What resnet type to use")
+                        help="""What resnet type to use (must be compatible with the
+                        specified model checkpoint""")
     parser.add_argument('--checkpoint', type=str, required=True,
-                        help="""Checkpoint file for model.""")
-    
+                        help="Checkpoint file for model.")
+    parser.add_argument('--softmax_temp', type=float, default=1.,
+                        help="Softmax temperature")
+    parser.add_argument('--top_k', type=int, default=3,
+                        help="""How many predicted attributes (per attribute category)
+                        should we show?""")
     args = parser.parse_args()
     return args
 
 args = parse_args()
+
+if args.filename is not None and args.out_file is None:
+    raise Exception("If you specify `filename` you must use `out_file`")
+if args.filenames is not None and args.out_folder is None:
+    raise Exception("If you specify `filenames` you must use `out_folder`")
 
 cat_names = input.get_ctg_name(args.df_dir)[0]
 # BUG: we accidentally didn't use zero-indexed labels for the
@@ -86,7 +110,22 @@ def load_image(filename, root="", ensemble=False):
     else:
         return img.unsqueeze(0)
 
-def plot_everything(net, filename, softmax_temp=1.0, ensemble=False, top_k=3):
+def plot_classification(net, filename, out_file, softmax_temp=1.0, ensemble=True, top_k=3):
+    """Produce an image detailing the category and attribute
+    classification of the given input.
+
+    :param net: network
+    :param filename: path to the image to be classified
+    :param softmax_temp: softmax temperature for category
+      classification.
+    :param ensemble: perform 10 random crops and average
+      the predictions?
+    :param top_k: for attribute classification, how many
+      of the top-performing attributes we should retain?
+    :returns: 
+    """
+
+    util.mkdir(os.path.dirname(out_file))
     
     with torch.no_grad():
         img = load_image(filename=filename, root="", ensemble=ensemble)
@@ -151,16 +190,37 @@ def plot_everything(net, filename, softmax_temp=1.0, ensemble=False, top_k=3):
         names, probs = annos[key]
         probs = np.asarray([x.item() for x in probs])
         probs_norm = probs / sum(probs)
-        labels = [ "%s\n(%f)" % (name,prob) for name,prob in zip(names, probs) ]
+        labels = [ "%s\n(%f)" % (name,prob) for name,prob in zip(names, probs_norm) ]
         bins[i].pie(probs_norm, labels=labels)
         bins[i].set_title(key)
 
-    fig.savefig('test.png') ##??
+    fig.savefig(out_file)
+    plt.close(fig)
 
 model = FashionResnet(50, 1000, args.resnet_type)
 
 from train import load_model
-
 load_model(model, args.checkpoint, optimizer=None, devices=[])
 
-plot_everything(model, args.filename, ensemble=True)
+if args.filenames is not None:
+    # Process a comma-separated list of filenames.
+    filenames = args.filenames.split(",")
+    for filename in filenames:
+        print("Processing %s..." % filename)
+        out_file = "%s/%s" % (args.out_folder, filename)
+        util.mkdir(os.path.dirname(out_file))
+        plot_classification(net=model,
+                            filename=filename,
+                            out_file=out_file,
+                            ensemble=True,
+                            softmax_temp=args.softmax_temp,
+                            top_k=args.top_k)
+else:
+    print("Processing %s..." % args.filename)
+    util.mkdir(os.path.dirname(args.out_file))
+    plot_classification(net=model,
+                        filename=args.filename,
+                        out_file=args.out_file,
+                        ensemble=True,
+                        softmax_temp=args.softmax_temp,
+                        top_k=args.top_k)
