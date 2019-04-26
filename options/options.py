@@ -63,9 +63,9 @@ class Options():
                                  help="""Epsilon (only applies to ADAM). If you are experiencing spikes
                                  in training, it may be because of numeric instabilities in the optimization,
                                  in which case this number should be bigger, e.g. 1e-4.""")
-        self.parser.add_argument('--top_k', type=str, default='(3,5)',
+        self.parser.add_argument('--top_k', type=str, default='3,5',
                                  help="""The k values that we should compute top-k for. For example, the default
-                                 value is '(3,5)', which means we compute our accuracy metrics for top-3 and top-k.""")
+                                 value is '3,5', which means we compute our accuracy metrics for top-3 and top-k.""")
 
     def parse(self):
         opt = self.parser.parse_args()
@@ -81,7 +81,8 @@ class Options():
         if len(opt.devices) > 0 and torch.cuda.is_available():
             opt.cuda = True
 
-        opt.top_k = eval(opt.top_k)
+        #opt.top_k = eval(opt.top_k)
+        opt.top_k = [int(x) for x in opt.top_k.split(',')]
 
         return opt
 
