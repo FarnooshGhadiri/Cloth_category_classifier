@@ -11,6 +11,11 @@ A PyTorch classifier for the DeepFashion dataset which performs category, attrib
 
 Note that we also use the data described here to augment our classifier with bounding box prediction. This is expected to help improve performance on the aforementioned category and attribute prediction tasks.
 
+The architecture we used is not exactly like the one which was proposed in the original paper, though conceptually it incorporates the similar notions, such as having the predictions leverage both global and local features, the latter of which is achieved through the bounding box prediction part of the network.
+
+<img src="https://user-images.githubusercontent.com/2417792/56816446-9086d900-6811-11e9-9afa-ce3787d50558.png" width=750 />
+
+
 ## Setting up the project
 
 ### Cloning the repository:
@@ -71,3 +76,7 @@ bash download_pretrained.sh
 This will download a model checkpoint and place it inside `results/pretrained_model`.
 
 This model was trained with example script mentioned in the model training section. For more details about this model, e.g. statistics on how well it performs, please see the wiki section of this repository.
+
+## Known issues
+
+- The experimental setup is fundamentally flawed in the sense that many of the images contain more than one clothing item (e.g. skirt, blouse) but there is only one label for it (e.g. skirt). So if you are classifying an image of a person wearing more than one clothing item, the prediction will be confounded by features from the other clothing item. It turns out that each of the 50 categories belongs to one of three subcategories: topwear has the subcategory label '1' (e.g. shirts), bottomwear '2' (e.g. skirts), and both top and bottom '3' (e.g. dresses). Therefore, a better way to construct the classifier is to actually have three classification branches rather than one (I don't think they did this in the original paper).
