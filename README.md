@@ -67,6 +67,8 @@ To understand what each keyword argument is, simply run `python train.py --help`
 
 During model training, after each epoch the script will append model statistics to `<experiment_name>/results.txt`, which details various things such as the losses and accuracies on both the training and validation set. This is useful for diagnosing model training.
 
+If you'd like to evaluate generalisation performance in post-hoc fashion, add `--mode=validate` or `--mode=test` to your training script to evaluate statistics on the validation and test set (by default, `--mode` is set to `train`).
+
 ### Testing the models
 
 We have provided a pre-trained model which you can use by simply running:
@@ -88,7 +90,7 @@ Alternatively, you can process many images at once by using `--filenames` (inste
 
 ```
 # process all images in Boxy_Pocket_Top
-IMGS=`find '/tmp/beckhamc/deep_fashion/DF_Img_Low/img/Boxy_Pocket_Top' -path '*.jpg' | tr '\n' ','`
+IMGS=`find '/tmp/beckhamc/deep_fashion/dataset/img/Boxy_Pocket_Top' -path '*.jpg' | tr '\n' ','`
 python test_on_image.py \
 --df_dir=/tmp/beckhamc/deep_fashion/ \
 --checkpoint=results/pretrained_model/epoch_340.pth \
@@ -102,3 +104,7 @@ To see the full list of options, simply run `python test_on_image.py --help`. So
 ## Known issues
 
 - The experimental setup is fundamentally flawed in the sense that many of the images contain more than one clothing item (e.g. skirt, blouse) but there is only one label for it (e.g. skirt). So if you are classifying an image of a person wearing more than one clothing item, the prediction will be confounded by features from the other clothing item. It turns out that each of the 50 categories belongs to one of three subcategories: topwear has the subcategory label '1' (e.g. shirts), bottomwear '2' (e.g. skirts), and both top and bottom '3' (e.g. dresses). Therefore, a better way to construct the classifier is to actually have three classification branches rather than one (I don't think they did this in the original paper).
+
+## Troubleshooting
+
+If you are experiencing any issues, please file a ticket in the Issues section.
