@@ -59,7 +59,7 @@ class Options():
                                  help="What optimizer to use. (Highly recommended to use ADAM)")
         self.parser.add_argument('--lr', type=float, default=1e-4,
                                  help="Learning rate")
-        self.parser.add_argument('--eps', type=float, default=1e-10,
+        self.parser.add_argument('--eps', type=float, default=1e-8,
                                  help="""Epsilon (only applies to ADAM). If you are experiencing spikes
                                  in training, it may be because of numeric instabilities in the optimization,
                                  in which case this number should be bigger, e.g. 1e-4.""")

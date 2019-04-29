@@ -159,7 +159,7 @@ class DeepFashionDataset(Dataset):
     def __getitem__(self, index):
         this_filename = self.filenames[index]
         
-        filepath = "%s/DF_Img_Low/img/%s" % (self.root, this_filename)
+        filepath = "%s/Img/img/%s" % (self.root, this_filename)
         img = Image.open(filepath)
         img = img.convert("RGB")
         

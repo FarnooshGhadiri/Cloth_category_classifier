@@ -96,6 +96,7 @@ def forward_dataset(model, criterion_softmax, criterion_binary, loader, opt):
     _, attr_type = get_attr_name(opt.data_dir)
     with torch.no_grad():
         stats = OrderedDict()
+        stats['bbox_loss'] = []
         pbar = tqdm(total=len(loader))
         for i, data in enumerate(loader):
             filepaths, inputs, target_softmax, target_binary, target_bbox = data
@@ -116,6 +117,7 @@ def forward_dataset(model, criterion_softmax, criterion_binary, loader, opt):
                 if key not in stats:
                     stats[key] = []
                 stats[key].append(acc_outputs[key])
+            stats['bbox_loss'].append(bbox_loss.item())
         pbar.close()
     return stats
 
@@ -536,7 +538,7 @@ def main():
         logging.info("Running in validate mode")
         accs = forward_dataset(model, criterion_softmax, criterion_binary, loader_valid, opt)
         for key in accs:
-            print(key, np.mean(accs[key]))
+            print("%s --> %.4f +/- %.4f" % (key, np.mean(accs[key]), np.std(accs[key])))
     elif opt.mode == "test":
         logging.info("Running in test mode")
         ds_test = DeepFashionDataset(root=opt.data_dir,
@@ -549,10 +551,10 @@ def main():
         loader_test = DataLoader(ds_test,
                                  shuffle=False,
                                  batch_size=opt.batch_size,
-                                 num_workers=1)
+                                 num_workers=opt.num_workers)
         accs = forward_dataset(model, criterion_softmax, criterion_binary, loader_test, opt)
         for key in accs:
-            print(key, np.mean(accs[key]))
+            print("%s --> %.4f +/- %.4f" % (key, np.mean(accs[key]), np.std(accs[key])))
 
 
 if __name__ == "__main__":
